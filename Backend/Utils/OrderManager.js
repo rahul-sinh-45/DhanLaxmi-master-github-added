@@ -169,7 +169,7 @@ const executeExit = async (orderData, exitPrice, reason) => {
         // C. ⚡ Release Fund Atomically
         const { broker_id_str, customer_id_str, product, margin_blocked, price, quantity, side } = orderData;
         const marginToRelease = Number(margin_blocked || (price * quantity) || 0);
-        
+
         let pnl = 0;
         if (closedLtp > 0) {
             pnl = side === 'BUY' ? (closedLtp - price) * quantity : (price - closedLtp) * quantity;

@@ -6,8 +6,12 @@ import {
     permanentDeleteBroker,
     toggleBanBroker
 } from '../Controllers/SuperBrocker.js';
+import { protect, adminOnly } from '../Middleware/authMiddleware.js';
 
 const router = express.Router();
+
+router.use(protect);
+router.use(adminOnly);
 
 // Delete a broker (Move to Recycle Bin)
 router.delete('/delete-broker/:id', deleteBroker);

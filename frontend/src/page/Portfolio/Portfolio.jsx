@@ -3,6 +3,7 @@ import {
   BarChart, Zap, Filter, PieChart, X, FileText, ChevronLeft, TrendingUp, Layers, Activity
 } from "lucide-react";
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { logMarketStatus } from "../../Utils/marketStatus.js";
 import { calculateExitBrokerageAndPnL, calculatePnLAndBrokerage, formatTradingSymbol } from "../../Utils/calculateBrokerage.jsx";
 import { useMarketData } from "../../contexts/MarketDataContext.jsx";
 import HoldOrderBottomWindow from "../Orders/Holding/holdOrderBottomWindow.jsx";
@@ -43,7 +44,7 @@ const PortfolioCard = ({ title, count, pnl, description, icon: Icon, actionText,
         <div className="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 flex-shrink-0">
           <Icon className="w-6 h-6" />
         </div>
-        
+
         {/* Texts */}
         <div className="min-w-0 flex-1">
           <h4 className="text-[var(--text-primary)] font-black text-sm uppercase tracking-wider mb-1 leading-none">
@@ -265,15 +266,15 @@ const PortfolioItem = ({ data, onClick }) => {
   const isBuy = sideUpper === "BUY";
   const isRestricted = data.order_status === "RESTRICTED";
 
-  const { netPnl, pct } = isRestricted 
-    ? { netPnl: 0, pct: 0 } 
+  const { netPnl, pct } = isRestricted
+    ? { netPnl: 0, pct: 0 }
     : calculateExitBrokerageAndPnL({
-        side: sideUpper,
-        avgPrice: entryPrice,
-        exitPrice,
-        qty,
-        symbol: tradingsymbol
-      });
+      side: sideUpper,
+      avgPrice: entryPrice,
+      exitPrice,
+      qty,
+      symbol: tradingsymbol
+    });
 
   const profit = netPnl >= 0;
   const pnlChipBg = profit ? "bg-[var(--gain-chip-bg)]" : "bg-[var(--loss-chip-bg)]";
@@ -312,7 +313,7 @@ const PortfolioItem = ({ data, onClick }) => {
             {isRestricted ? "—" : `₹${exitPrice.toFixed(2)}`}
           </div>
           <div className={`text-[9px] font-black px-2.5 py-1 rounded-full ${isRestricted ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : pnlChipBg} ${isRestricted ? '' : pnlTextColorClass}`}>
-             {isRestricted ? "REJECTED" : `${pnlArrow} ${netPnl.toFixed(2)} (${profit ? "+" : ""}${pct.toFixed(2)}%)`}
+            {isRestricted ? "REJECTED" : `${pnlArrow} ${netPnl.toFixed(2)} (${profit ? "+" : ""}${pct.toFixed(2)}%)`}
           </div>
         </div>
       </div>
@@ -538,12 +539,14 @@ const OpenPortfolioItem = ({ data, userRole, onExit, onRestrict, onModify }) => 
             >
               Modify
             </button>
-            <button
-              onClick={() => onExit(data)}
-              className="flex-1 py-3 bg-[#f23645] text-white text-[11px] font-black uppercase tracking-[2px] rounded-2xl hover:brightness-110 active:scale-[0.98] transition-all"
-            >
-              Exit
-            </button>
+            {(userRole === 'broker' || logMarketStatus(data.segment)) && (
+              <button
+                onClick={() => onExit(data)}
+                className="flex-1 py-3 bg-[#f23645] text-white text-[11px] font-black uppercase tracking-[2px] rounded-2xl hover:brightness-110 active:scale-[0.98] transition-all"
+              >
+                Exit
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -870,7 +873,7 @@ export default function Portfolio() {
       const currentPrice = liveLtp || initialPrice;
       const orderSide = String(data.side ?? "").toUpperCase();
       const isBuy = orderSide === "BUY";
-      
+
       const jpValue = Number(data.jobbing_point || 0);
       let closedLtp;
       if (Number(data.customer_exit_price || 0) > 0) {
@@ -1106,7 +1109,7 @@ export default function Portfolio() {
       }
       const data = await res.json();
       console.log('[Portfolio] API Response:', data);
-      
+
       // Filter for only CLOSED and RESTRICTED orders
       const rawOrders = Array.isArray(data?.ordersInstrument) ? data.ordersInstrument : [];
       const orders = rawOrders.filter(o => o.order_status === "CLOSED" || o.order_status === "RESTRICTED");
@@ -1241,10 +1244,10 @@ export default function Portfolio() {
           <div className="space-y-6">
             {/* Overall Summary Card */}
             <div className="bg-gradient-to-br from-[#3b82f6] to-[#2563eb] p-6 rounded-3xl shadow-xl shadow-blue-500/20 border-none animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
-               {/* Subtle background decoration */}
-               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-               <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-400/20 rounded-full -ml-12 -mb-12 blur-xl"></div>
-               
+              {/* Subtle background decoration */}
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+              <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-400/20 rounded-full -ml-12 -mb-12 blur-xl"></div>
+
               <div className="flex flex-wrap justify-between items-start gap-4 mb-6 relative z-10">
                 <div className="min-w-fit flex-1">
                   <p className="text-blue-100 text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">Total Invested</p>
@@ -1346,38 +1349,38 @@ export default function Portfolio() {
                   />
                 ) : (
                   <div className="bg-gradient-to-br from-[#3b82f6] to-[#2563eb] p-6 rounded-3xl shadow-xl shadow-blue-500/20 border-none animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
-                   {/* Subtle background decoration */}
-                   <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-                   <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-400/20 rounded-full -ml-12 -mb-12 blur-xl"></div>
-                   
-                  {/* Portfolio Summary Card */}
-                  <div className="flex flex-wrap justify-between items-start gap-4 mb-6 relative z-10">
-                    <div className="min-w-fit flex-1">
-                      <p className="text-blue-100 text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">
-                        {currentTab === 'holding' || currentTab === 'open' ? 'Current Value' : 'Total Invested'}
-                      </p>
-                      <p className="text-2xl sm:text-3xl font-black text-white break-all leading-none">
-                        {currentTab === 'holding' || currentTab === 'open' ? money(summary.current) : money(summary.invested)}
-                      </p>
-                    </div>
-                    <div className="min-w-fit flex-1 text-right">
-                      <p className="text-blue-100 text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">
-                        {currentTab === 'holding' || currentTab === 'open' ? 'Total Invested' : 'Realized Value'}
-                      </p>
-                      <p className="text-2xl sm:text-3xl font-black text-white break-all leading-none">
-                        {currentTab === 'holding' || currentTab === 'open' ? money(summary.invested) : money(summary.current)}
-                      </p>
-                    </div>
-                  </div>
+                    {/* Subtle background decoration */}
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+                    <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-400/20 rounded-full -ml-12 -mb-12 blur-xl"></div>
 
-                  <div className="flex justify-between items-center pt-5 border-t border-white/20 relative z-10">
-                    <p className="text-blue-100 text-[11px] font-black uppercase tracking-widest">
-                      {currentTab === 'holding' || currentTab === 'open' ? 'Total Open P&L' : 'Total Realized P&L'}
-                    </p>
-                    <span className={`text-lg sm:text-xl font-black px-4 py-1 rounded-full bg-white/20 backdrop-blur-md text-white border border-white/30 whitespace-nowrap`}>
-                      {summary.totalPnl >= 0 ? "+" : ""}{money(summary.totalPnl)}
-                    </span>
-                  </div>
+                    {/* Portfolio Summary Card */}
+                    <div className="flex flex-wrap justify-between items-start gap-4 mb-6 relative z-10">
+                      <div className="min-w-fit flex-1">
+                        <p className="text-blue-100 text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">
+                          {currentTab === 'holding' || currentTab === 'open' ? 'Current Value' : 'Total Invested'}
+                        </p>
+                        <p className="text-2xl sm:text-3xl font-black text-white break-all leading-none">
+                          {currentTab === 'holding' || currentTab === 'open' ? money(summary.current) : money(summary.invested)}
+                        </p>
+                      </div>
+                      <div className="min-w-fit flex-1 text-right">
+                        <p className="text-blue-100 text-[10px] font-black uppercase tracking-widest mb-1 opacity-80">
+                          {currentTab === 'holding' || currentTab === 'open' ? 'Total Invested' : 'Realized Value'}
+                        </p>
+                        <p className="text-2xl sm:text-3xl font-black text-white break-all leading-none">
+                          {currentTab === 'holding' || currentTab === 'open' ? money(summary.invested) : money(summary.current)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-5 border-t border-white/20 relative z-10">
+                      <p className="text-blue-100 text-[11px] font-black uppercase tracking-widest">
+                        {currentTab === 'holding' || currentTab === 'open' ? 'Total Open P&L' : 'Total Realized P&L'}
+                      </p>
+                      <span className={`text-lg sm:text-xl font-black px-4 py-1 rounded-full bg-white/20 backdrop-blur-md text-white border border-white/30 whitespace-nowrap`}>
+                        {summary.totalPnl >= 0 ? "+" : ""}{money(summary.totalPnl)}
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1428,7 +1431,7 @@ export default function Portfolio() {
             {!loader && (currentTab === 'holding' ? displayHoldings.length : currentTab === 'open' ? displayOpenOrders.length : filteredOrders.length) === 0 && (
               <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-3xl p-10 text-center flex flex-col items-center shadow-xl">
                 <div className="w-16 h-16 bg-[var(--bg-secondary)] rounded-full flex items-center justify-center mb-4">
-                   <Filter className="w-8 h-8 text-[var(--text-muted)] opacity-50" />
+                  <Filter className="w-8 h-8 text-[var(--text-muted)] opacity-50" />
                 </div>
                 <p className="text-[var(--text-primary)] font-black uppercase text-sm mb-1">No orders found</p>
                 {currentTab !== 'holding' && currentTab !== 'open' && allOrders.length > 0 && <p className="text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-wider">Try adjusting your filters</p>}

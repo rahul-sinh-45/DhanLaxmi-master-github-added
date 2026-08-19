@@ -242,9 +242,17 @@ export default function CustomerDetailsPage() {
                   <span className="text-[#8aa2ff]">{c.id}</span>
                 </div>
 
-                <div className="text-sm font-semibold">
-                  <span className="text-[var(--text-secondary)]">password:</span>{' '}
-                  <span className="text-[#8aa2ff]">{c.password}</span>
+                <div className="text-sm font-semibold flex flex-col gap-1">
+                  <div>
+                    <span className="text-[var(--text-secondary)]">Password:</span>{' '}
+                    <span className="text-[#8aa2ff]">{c.password}</span>
+                  </div>
+                  {c.old_password && (
+                    <div>
+                      <span className="text-[var(--text-secondary)]">Old Password:</span>{' '}
+                      <span className="text-[#89f5a4]">{c.old_password}</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="text-right text-[var(--text-primary)]">{c.name} </div>

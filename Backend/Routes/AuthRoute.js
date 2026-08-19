@@ -14,7 +14,8 @@ import {
   uploadProfilePhoto,
   getCustomerDetails,
   updateBrokerJobbing,
-  toggleBanCustomer
+  toggleBanCustomer,
+  changePassword
 } from '../Controllers/CustomerController.js';
 // IMPORTANT: JWT verification ke liye
 import { protect } from '../Middleware/authMiddleware.js';
@@ -57,6 +58,7 @@ router.post('/toggle-ban-customer/:id', protect, toggleBanCustomer);
 // --- CUSTOMER PROFILE ROUTES ---
 router.get('/customer/:customerId', protect, getCustomerDetails);
 router.put('/customer/:customerId/profile-photo', protect, upload.single('profilePhoto'), uploadProfilePhoto);
+router.post('/change-password', protect, changePassword);
 
 // --- RECYCLE BIN ROUTES ---
 router.get('/deleted-customers', protect, getDeletedCustomers);

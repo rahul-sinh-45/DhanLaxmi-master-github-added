@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import OpenOrderBottomWindow from "./OpenOderBottomWindow.jsx";
 import { calculatePnLAndBrokerage, formatTradingSymbolNew } from "../../../Utils/calculateBrokerage.jsx";
 import LockedButtonWrapper from "../../../components/LockedButtonWrapper";
+import { logMarketStatus } from "../../../Utils/marketStatus.js";
 
 const money = (n) => `₹${Number(n ?? 0).toFixed(2)}`;
 
@@ -645,15 +646,17 @@ export default function OpenOrder({ filter }) {
                       </button>
                     </LockedButtonWrapper>
 
-                    <LockedButtonWrapper featureId="cancel_order" className="flex-1">
-                      <button
-                        onClick={() => handleSingleExit(data)}
-                        disabled={isProcessingId === data._id}
-                        className={`w-full py-3.5 bg-[#f23645] text-white text-[11px] font-black uppercase tracking-[2px] rounded-2xl hover:brightness-110 active:scale-[0.98] transition-all ${isProcessingId === data._id ? 'opacity-50' : ''}`}
-                      >
-                        {isProcessingId === data._id ? 'Exiting...' : 'Exit'}
-                      </button>
-                    </LockedButtonWrapper>
+                    {(userRole === 'broker' || logMarketStatus(data.segment)) && (
+                      <LockedButtonWrapper featureId="cancel_order" className="flex-1">
+                        <button
+                          onClick={() => handleSingleExit(data)}
+                          disabled={isProcessingId === data._id}
+                          className={`w-full py-3.5 bg-[#f23645] text-white text-[11px] font-black uppercase tracking-[2px] rounded-2xl hover:brightness-110 active:scale-[0.98] transition-all ${isProcessingId === data._id ? 'opacity-50' : ''}`}
+                        >
+                          {isProcessingId === data._id ? 'Exiting...' : 'Exit'}
+                        </button>
+                      </LockedButtonWrapper>
+                    )}
                   </div>
                 )}
               </div>

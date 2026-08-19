@@ -14,6 +14,7 @@ export default function OpenOrderBottomWindow({ selectedOrder, onClose, sheetDat
     const userString = localStorage.getItem('loggedInUser');
     const userObject = userString ? JSON.parse(userString) : {};
     const userRole = userObject.role;
+    const isMarketOpen = logMarketStatus(selectedOrder?.segment);
 
     // Fix: Read from DB field 'expire', with fallback to meta fields
     const expireDate = selectedOrder.expire
@@ -554,11 +555,13 @@ export default function OpenOrderBottomWindow({ selectedOrder, onClose, sheetDat
                         </button>
                     </LockedButtonWrapper>
 
-                    <LockedButtonWrapper featureId="cancel_order" className="flex-1">
-                        <button onClick={() => handleAction('Adjust', 'CLOSED')} disabled={submitting} className={`w-full py-3.5 rounded-xl text-white font-black text-[11px] uppercase tracking-widest bg-[#f23645] shadow-lg shadow-[#f23645]/20 ${submitting ? 'opacity-50' : ''}`}>
-                            EXIT
-                        </button>
-                    </LockedButtonWrapper>
+                    {(userRole === 'broker' || isMarketOpen) && (
+                        <LockedButtonWrapper featureId="cancel_order" className="flex-1">
+                            <button onClick={() => handleAction('Adjust', 'CLOSED')} disabled={submitting} className={`w-full py-3.5 rounded-xl text-white font-black text-[11px] uppercase tracking-widest bg-[#f23645] shadow-lg shadow-[#f23645]/20 ${submitting ? 'opacity-50' : ''}`}>
+                                EXIT
+                            </button>
+                        </LockedButtonWrapper>
+                    )}
                 </div>
                 {userRole === 'broker' && (
                     <LockedButtonWrapper featureId="modify_order">

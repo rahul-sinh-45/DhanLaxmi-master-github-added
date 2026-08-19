@@ -30,6 +30,38 @@ axios.interceptors.response.use(
   }
 );
 
+// ── Global Fetch Interceptor: Inject token and handle 401 ──
+const originalFetch = window.fetch;
+window.fetch = async (input, init) => {
+  let url = typeof input === 'string' ? input : input?.url;
+  const token = localStorage.getItem('token') || localStorage.getItem('authToken');
+  
+  let newInit = init ? { ...init } : {};
+  if (token && url && (url.startsWith('/api') || url.includes('/api/'))) {
+    newInit.headers = {
+      ...newInit.headers,
+      'Authorization': `Bearer ${token}`,
+    };
+  }
+  
+  try {
+    const response = await originalFetch(input, newInit);
+    if (response.status === 401) {
+      const currentPath = window.location.pathname;
+      if (currentPath !== '/' && currentPath !== '/login' && currentPath !== '/register') {
+        localStorage.removeItem('token');
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('loggedInUser');
+        localStorage.removeItem('activeContext');
+        window.location.href = '/login';
+      }
+    }
+    return response;
+  } catch (error) {
+    throw error;
+  }
+};
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <App />
 );

@@ -355,6 +355,17 @@ function Watchlist() {
   // Helper to get active context
   const getActiveContext = () => {
     try {
+      const userString = localStorage.getItem('loggedInUser');
+      const userObject = userString ? JSON.parse(userString) : {};
+      
+      if (userObject.role === 'customer') {
+        const globalBrokerId = localStorage.getItem('associatedBrokerStringId');
+        return {
+          brokerId: globalBrokerId,
+          customerId: userObject.id
+        };
+      }
+      
       const raw = localStorage.getItem('activeContext');
       const parsed = raw ? JSON.parse(raw) : {};
       return {

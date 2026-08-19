@@ -82,8 +82,12 @@ const OptionStrikeBottomWindow = ({
                     const userString = localStorage.getItem('loggedInUser');
                     const userObject = userString ? JSON.parse(userString) : {};
 
-                    const effectiveBrokerId = brokerId || activeContext.brokerId || globalBrokerId;
-                    const effectiveCustomerId = customerId || activeContext.customerId || urlCustomerId || (userObject.role === 'customer' ? userObject.id : null);
+                    const effectiveBrokerId = userObject.role === 'customer'
+                        ? globalBrokerId
+                        : (brokerId || activeContext.brokerId || globalBrokerId);
+                    const effectiveCustomerId = userObject.role === 'customer'
+                        ? userObject.id
+                        : (customerId || activeContext.customerId || urlCustomerId);
 
                     if (!effectiveBrokerId || !effectiveCustomerId) return;
 
@@ -337,8 +341,12 @@ const OptionStrikeBottomWindow = ({
             const userString = localStorage.getItem('loggedInUser');
             const userObject = userString ? JSON.parse(userString) : {};
 
-            const effectiveBrokerId = brokerId || activeContext.brokerId || globalBrokerId;
-            const effectiveCustomerId = customerId || activeContext.customerId || urlCustomerId || (userObject.role === 'customer' ? userObject.id : null);
+            const effectiveBrokerId = userObject.role === 'customer'
+                ? globalBrokerId
+                : (brokerId || activeContext.brokerId || globalBrokerId);
+            const effectiveCustomerId = userObject.role === 'customer'
+                ? userObject.id
+                : (customerId || activeContext.customerId || urlCustomerId);
 
             const side = actionTab === 'Buy' ? 'BUY' : 'SELL';
             const product = productType === 'Intraday' ? 'MIS' : 'NRML';
@@ -356,6 +364,11 @@ const OptionStrikeBottomWindow = ({
             } else {
                 const jobbinFactor = actionTab === 'Buy' ? (1 + orderJobbingPct) : (1 - orderJobbingPct);
                 finalPrice = Number((ltp * jobbinFactor).toFixed(4));
+            }
+            if (finalPrice <= 0) {
+                setFeedback({ type: 'error', message: 'Price / Share cannot be zero or negative. Please adjust your jobbing point.' });
+                setSubmitting(false);
+                return;
             }
             const token = localStorage.getItem('token') || localStorage.getItem('authToken') || null;
 
@@ -561,15 +574,17 @@ const OptionStrikeBottomWindow = ({
 
                 {/* MATCHED MINI FOOTER */}
                 <div className="p-4 bg-[#1e222d] border-t border-[#2a2e39] flex gap-3">
-                    <LockedButtonWrapper featureId={actionTab === 'Buy' ? 'buy' : 'sell'} className="flex-[2]">
-                        <button 
-                            onClick={handleConfirm} 
-                            disabled={submitting || !lotsNum} 
-                            className={`w-full py-3.5 rounded-xl text-white font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 ${actionTab === 'Buy' ? 'bg-[#089981]' : 'bg-[#f23645]'} ${submitting || !lotsNum ? 'opacity-50' : ''}`}
-                        >
-                            {submitting ? '...' : actionTab}
-                        </button>
-                    </LockedButtonWrapper>
+                    {(userRole === 'broker' || isMarketOpen) && (
+                        <LockedButtonWrapper featureId={actionTab === 'Buy' ? 'buy' : 'sell'} className="flex-[2]">
+                            <button 
+                                onClick={handleConfirm} 
+                                disabled={submitting || !lotsNum || adjustedPricePerShare <= 0} 
+                                className={`w-full py-3.5 rounded-xl text-white font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 ${actionTab === 'Buy' ? 'bg-[#089981]' : 'bg-[#f23645]'} ${submitting || !lotsNum || adjustedPricePerShare <= 0 ? 'opacity-50' : ''}`}
+                            >
+                                {submitting ? '...' : actionTab}
+                            </button>
+                        </LockedButtonWrapper>
+                    )}
                     <button 
                         onClick={onClose} 
                         className="flex-1 py-3.5 rounded-xl bg-[#2a2e39] text-[#808a9d] font-bold text-[10px] uppercase transition-colors hover:text-white"

@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   User, Shield, IdCard, LogOut, UserCheck, Moon, Sun, Loader2, Camera,
   ChevronRight, BookOpen, CreditCard, HelpCircle, Info, Settings,
-  CheckCircle, Building2, Pencil, X, Download, PlusCircle
+  CheckCircle, Building2, Pencil, X, Download, PlusCircle, Lock, History, Key
 } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 import { usePWA } from "../../contexts/PWAContext";
@@ -17,6 +17,41 @@ export default function Profile() {
   const [customerData, setCustomerData] = useState(null);
   const [loading, setLoading] = useState(false);
   const { isInstallable, isStandalone, installPWA } = usePWA();
+
+  const [oldPwd, setOldPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [pwdSubmitting, setPwdSubmitting] = useState(false);
+  const [pwdMessage, setPwdMessage] = useState(null);
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (!oldPwd || !newPwd) return;
+    setPwdSubmitting(true);
+    setPwdMessage(null);
+
+    try {
+      const res = await fetch(`${apiBase}/api/auth/change-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPwdMessage({ success: true, text: "Password updated successfully!" });
+        setOldPwd("");
+        setNewPwd("");
+      } else {
+        setPwdMessage({ success: false, text: data.message || "Failed to update password." });
+      }
+    } catch (err) {
+      setPwdMessage({ success: false, text: "Network error occurred." });
+    } finally {
+      setPwdSubmitting(false);
+    }
+  };
 
   const apiBase = import.meta.env.VITE_REACT_APP_API_URL || "";
   const token = localStorage.getItem("authToken") || localStorage.getItem("token");
@@ -224,6 +259,10 @@ export default function Profile() {
                   <DetailRow icon={IdCard} label="Customer ID" value={viewingCustomerId} />
                   <DetailRow icon={User} label="Customer Name" value={customerData?.name} />
                   <DetailRow icon={UserCheck} label="Joining Date" value={joiningDate} />
+                  <DetailRow icon={Lock} label="Current Password" value={customerData?.password} />
+                  {customerData?.old_password && (
+                    <DetailRow icon={History} label="Old Password" value={customerData?.old_password} />
+                  )}
                 </>
               )}
               {role === "broker" && !isBrokerViewingCustomer && (
@@ -261,6 +300,53 @@ export default function Profile() {
             </div>
           </div>
         )} */}
+
+        {/* ═══════════ CHANGE PASSWORD (CUSTOMER ONLY) ═══════════ */}
+        {role === "customer" && (
+          <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl shadow-sm p-5">
+            <h3 className="text-base font-bold mb-3 flex items-center gap-2">
+              <Key className="w-5 h-5 text-indigo-400" /> Change Password
+            </h3>
+            {pwdMessage && (
+              <p className={`text-xs mb-3 font-semibold ${pwdMessage.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                {pwdMessage.text}
+              </p>
+            )}
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Old Password</label>
+                <input
+                  type="password"
+                  value={oldPwd}
+                  onChange={(e) => setOldPwd(e.target.value)}
+                  placeholder="Enter old password"
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-indigo-500 transition-colors"
+                  required
+                  disabled={pwdSubmitting}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={newPwd}
+                  onChange={(e) => setNewPwd(e.target.value)}
+                  placeholder="Enter new password"
+                  className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-3.5 py-2.5 text-sm text-[var(--text-primary)] focus:outline-none focus:border-indigo-500 transition-colors"
+                  required
+                  disabled={pwdSubmitting}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={pwdSubmitting}
+                className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-widest transition-all duration-200 disabled:opacity-50 active:scale-[0.98]"
+              >
+                {pwdSubmitting ? 'Updating...' : 'Update Password'}
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* ═══════════ MENU ITEMS ═══════════ */}
         <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl shadow-sm overflow-hidden">

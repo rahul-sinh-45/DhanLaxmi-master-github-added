@@ -209,7 +209,30 @@ const getFunds = asyncHandler(async (req, res) => {
         data: fund
     });
 });
+const syncDependentLimits = (fund) => {
+    const totalBaseMargin = (fund.intraday?.available_limit || 0) + (fund.overnight?.available_limit || 0);
 
+    // 1. Regular Option Limit
+    const optionPct = fund.option_limit_percentage !== undefined ? fund.option_limit_percentage : 10;
+    const optionAvail = totalBaseMargin * (optionPct / 100);
+    if (!fund.option_limit) fund.option_limit = {};
+    fund.option_limit.available_limit = optionAvail;
+    fund.option_limit.free_limit = Math.max(0, optionAvail - (fund.option_limit.used_limit || 0));
+
+    // 2. MCX Limit
+    const mcxPct = fund.mcx_limit_percentage !== undefined ? fund.mcx_limit_percentage : 10;
+    const mcxAvail = totalBaseMargin * (mcxPct / 100);
+    if (!fund.mcx_limit) fund.mcx_limit = {};
+    fund.mcx_limit.available_limit = mcxAvail;
+    fund.mcx_limit.free_limit = Math.max(0, mcxAvail - (fund.mcx_limit.used_limit || 0));
+
+    // 3. MCX Option Limit
+    const mcxOptionPct = fund.mcx_option_limit_percentage !== undefined ? fund.mcx_option_limit_percentage : 10;
+    const mcxOptionAvail = totalBaseMargin * (mcxOptionPct / 100);
+    if (!fund.mcx_option_limit) fund.mcx_option_limit = {};
+    fund.mcx_option_limit.available_limit = mcxOptionAvail;
+    fund.mcx_option_limit.free_limit = Math.max(0, mcxOptionAvail - (fund.mcx_option_limit.used_limit || 0));
+};
 
 const updateIntradayLimit = asyncHandler(async (req, res) => {
     const { broker_id_str, customer_id_str, new_limit } = req.body;
@@ -219,25 +242,20 @@ const updateIntradayLimit = asyncHandler(async (req, res) => {
         throw new Error("New limit is required");
     }
 
-    const updatedFund = await Fund.findOneAndUpdate(
-        { broker_id_str, customer_id_str },
-        { 
-            $set: { 
-                "intraday.available_limit": new_limit,
-                "intraday.free_limit": new_limit
-            } 
-        },
-        { new: true }
-    );
-
-    if (!updatedFund) {
+    const fund = await Fund.findOne({ broker_id_str, customer_id_str });
+    if (!fund) {
         res.status(404);
         throw new Error("Fund record not found");
     }
 
-    res.status(200).json({ success: true, data: updatedFund });
-});
+    fund.intraday.available_limit = Number(new_limit);
+    fund.intraday.free_limit = Number(new_limit) - (fund.intraday.used_limit || 0);
 
+    syncDependentLimits(fund);
+    await fund.save();
+
+    res.status(200).json({ success: true, data: fund });
+});
 
 const updateIntradayAvailabeLimit = asyncHandler(async (req, res) => {
     const { broker_id_str, customer_id_str, new_limit } = req.body;
@@ -246,26 +264,20 @@ const updateIntradayAvailabeLimit = asyncHandler(async (req, res) => {
         throw new Error("New limit is required");
     }
 
-    const updatedFund = await Fund.findOneAndUpdate(
-        { broker_id_str, customer_id_str },
-        { 
-            $set: { 
-                "intraday.available_limit": new_limit,
-                "intraday.free_limit": new_limit
-            } 
-        },
-        { new: true }
-    );
-
-    if (!updatedFund) {
+    const fund = await Fund.findOne({ broker_id_str, customer_id_str });
+    if (!fund) {
         res.status(404);
         throw new Error("Fund record not found");
     }
 
-    res.status(200).json({ success: true, data: updatedFund });
+    fund.intraday.available_limit = Number(new_limit);
+    fund.intraday.free_limit = Number(new_limit) - (fund.intraday.used_limit || 0);
+
+    syncDependentLimits(fund);
+    await fund.save();
+
+    res.status(200).json({ success: true, data: fund });
 });
-
-
 
 const updateOvernightAvailableLimit = asyncHandler(async (req, res) => {
     const { broker_id_str, customer_id_str, new_limit } = req.body;
@@ -275,58 +287,57 @@ const updateOvernightAvailableLimit = asyncHandler(async (req, res) => {
         throw new Error("New limit is required");
     }
 
-    const updatedFund = await Fund.findOneAndUpdate(
-        { broker_id_str, customer_id_str },
-        { 
-            $set: { 
-                "overnight.available_limit": new_limit 
-            } 
-        },
-        { new: true }
-    );
-
-    if (!updatedFund) {
+    const fund = await Fund.findOne({ broker_id_str, customer_id_str });
+    if (!fund) {
         res.status(404);
         throw new Error("Fund record not found");
     }
 
-    res.status(200).json({ success: true, data: updatedFund });
+    fund.overnight.available_limit = Number(new_limit);
+    fund.overnight.free_limit = Number(new_limit) - (fund.overnight.used_limit || 0);
+
+    syncDependentLimits(fund);
+    await fund.save();
+
+    res.status(200).json({ success: true, data: fund });
 });
 
 const updateIntradayLimitsAll = asyncHandler(async (req, res) => {
     const { broker_id_str, customer_id_str, available_limit, free_limit, used_limit } = req.body;
 
-    const updatedFund = await Fund.findOneAndUpdate(
-        { broker_id_str, customer_id_str },
-        { 
-            $set: { 
-                "intraday.available_limit": available_limit !== undefined ? available_limit : 0,
-                "intraday.free_limit": free_limit !== undefined ? free_limit : 0,
-                "intraday.used_limit": used_limit !== undefined ? used_limit : 0
-            } 
-        },
-        { new: true }
-    );
+    const fund = await Fund.findOne({ broker_id_str, customer_id_str });
+    if (!fund) {
+        res.status(404);
+        throw new Error("Fund record not found");
+    }
 
-    res.status(200).json({ success: true, data: updatedFund });
+    fund.intraday.available_limit = available_limit !== undefined ? Number(available_limit) : 0;
+    fund.intraday.free_limit = free_limit !== undefined ? Number(free_limit) : 0;
+    fund.intraday.used_limit = used_limit !== undefined ? Number(used_limit) : 0;
+
+    syncDependentLimits(fund);
+    await fund.save();
+
+    res.status(200).json({ success: true, data: fund });
 });
 
 const updateOvernightLimitsAll = asyncHandler(async (req, res) => {
     const { broker_id_str, customer_id_str, available_limit, free_limit, used_limit } = req.body;
 
-    const updatedFund = await Fund.findOneAndUpdate(
-        { broker_id_str, customer_id_str },
-        { 
-            $set: { 
-                "overnight.available_limit": available_limit !== undefined ? available_limit : 0,
-                "overnight.free_limit": free_limit !== undefined ? free_limit : 0,
-                "overnight.used_limit": used_limit !== undefined ? used_limit : 0
-            } 
-        },
-        { new: true }
-    );
+    const fund = await Fund.findOne({ broker_id_str, customer_id_str });
+    if (!fund) {
+        res.status(404);
+        throw new Error("Fund record not found");
+    }
 
-    res.status(200).json({ success: true, data: updatedFund });
+    fund.overnight.available_limit = available_limit !== undefined ? Number(available_limit) : 0;
+    fund.overnight.free_limit = free_limit !== undefined ? Number(free_limit) : 0;
+    fund.overnight.used_limit = used_limit !== undefined ? Number(used_limit) : 0;
+
+    syncDependentLimits(fund);
+    await fund.save();
+
+    res.status(200).json({ success: true, data: fund });
 });
 
 const updateOptionLimitsAll = asyncHandler(async (req, res) => {
@@ -416,21 +427,17 @@ const updateOptionLimitPercentage = asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: "Percentage is required" });
     }
 
-    const updatedFund = await Fund.findOneAndUpdate(
-        { broker_id_str, customer_id_str },
-        { 
-            $set: { 
-                option_limit_percentage: Number(percentage) 
-            } 
-        },
-        { new: true }
-    );
-
-    if (!updatedFund) {
+    const fund = await Fund.findOne({ broker_id_str, customer_id_str });
+    if (!fund) {
         return res.status(404).json({ success: false, message: "Fund record not found" });
     }
 
-    res.status(200).json({ success: true, data: updatedFund });
+    fund.option_limit_percentage = Number(percentage);
+
+    syncDependentLimits(fund);
+    await fund.save();
+
+    res.status(200).json({ success: true, data: fund });
 });
 
 const updateMcxLimitPercentage = asyncHandler(async (req, res) => {
@@ -440,21 +447,17 @@ const updateMcxLimitPercentage = asyncHandler(async (req, res) => {
         return res.status(400).json({ success: false, message: "Percentage is required" });
     }
 
-    const updatedFund = await Fund.findOneAndUpdate(
-        { broker_id_str, customer_id_str },
-        { 
-            $set: { 
-                mcx_limit_percentage: Number(percentage) 
-            } 
-        },
-        { new: true }
-    );
-
-    if (!updatedFund) {
+    const fund = await Fund.findOne({ broker_id_str, customer_id_str });
+    if (!fund) {
         return res.status(404).json({ success: false, message: "Fund record not found" });
     }
 
-    res.status(200).json({ success: true, data: updatedFund });
+    fund.mcx_limit_percentage = Number(percentage);
+
+    syncDependentLimits(fund);
+    await fund.save();
+
+    res.status(200).json({ success: true, data: fund });
 });
 
 // =============================================
@@ -661,18 +664,23 @@ const updateMcxAvailableLimit = asyncHandler(async (req, res) => {
 const updateMcxOptionLimitPercentage = asyncHandler(async (req, res) => {
     const { broker_id_str, customer_id_str, percentage } = req.body;
 
-    if (percentage === undefined) {
+    if (percentage === undefined || percentage === null) {
         res.status(400);
         throw new Error("Percentage is required");
     }
 
-    const updatedFund = await Fund.findOneAndUpdate(
-        { broker_id_str, customer_id_str },
-        { $set: { mcx_option_limit_percentage: Number(percentage) } },
-        { new: true, upsert: true }
-    );
+    const fund = await Fund.findOne({ broker_id_str, customer_id_str });
+    if (!fund) {
+        res.status(404);
+        throw new Error("Fund record not found");
+    }
 
-    res.status(200).json({ success: true, data: updatedFund });
+    fund.mcx_option_limit_percentage = Number(percentage);
+
+    syncDependentLimits(fund);
+    await fund.save();
+
+    res.status(200).json({ success: true, data: fund });
 });
 
 const updateMcxOptionLimitsAll = asyncHandler(async (req, res) => {

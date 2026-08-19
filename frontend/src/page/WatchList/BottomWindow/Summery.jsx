@@ -44,8 +44,13 @@ function Summery({
   const userString = localStorage.getItem('loggedInUser');
   const userObject = userString ? JSON.parse(userString) : {};
 
-  const effectiveBrokerId = brokerId || activeContext.brokerId || globalBrokerId;
-  const effectiveCustomerId = customerId || activeContext.customerId || urlCustomerId || (userObject.role === 'customer' ? userObject.id : null);
+  const effectiveBrokerId = userObject.role === 'customer'
+    ? globalBrokerId
+    : (brokerId || activeContext.brokerId || globalBrokerId);
+
+  const effectiveCustomerId = userObject.role === 'customer'
+    ? userObject.id
+    : (customerId || activeContext.customerId || urlCustomerId);
 
   // ---------- local states ----------
   const [jobbin_price, setJobbin_price] = useState("0");
@@ -326,6 +331,11 @@ function Summery({
       const jobbinFactor = isBuy ? (1 + orderJobbingPct) : (1 - orderJobbingPct);
       finalPrice = Number((priceForOrder * jobbinFactor).toFixed(4));
     }
+    if (finalPrice <= 0) {
+      setFeedback({ type: 'error', message: 'Price / Share cannot be zero or negative. Please adjust your jobbing point.' });
+      setSubmitting(false);
+      return;
+    }
     const calculatedOrderValue = Number((finalPrice * qty).toFixed(2));
 
     // *** 2. FUND VALIDATION LOGIC ***
@@ -532,7 +542,7 @@ function Summery({
       <div className="p-4 bg-[#1e222d] border-t border-[#2a2e39] flex gap-3">
         {(userRole === 'broker' || isOpen) && (
           <LockedButtonWrapper featureId={actionTab === 'Buy' ? 'buy' : 'sell'} className="flex-[2]">
-            <button onClick={handleConfirm} disabled={submitting} className={`w-full py-3.5 rounded-xl text-white font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 ${actionTab === 'Buy' ? 'bg-[#089981]' : 'bg-[#f23645]'} ${submitting ? 'opacity-50' : ''}`}>
+            <button onClick={handleConfirm} disabled={submitting || adjustedPricePerShare <= 0} className={`w-full py-3.5 rounded-xl text-white font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 ${actionTab === 'Buy' ? 'bg-[#089981]' : 'bg-[#f23645]'} ${submitting || adjustedPricePerShare <= 0 ? 'opacity-50' : ''}`}>
               {submitting ? '...' : `${actionTab}`}
             </button>
           </LockedButtonWrapper>

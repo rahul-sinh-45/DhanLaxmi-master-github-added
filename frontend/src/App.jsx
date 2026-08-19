@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 // === CRITICAL TRADING PAGES - EAGER LOAD (0ms navigation) ===
@@ -77,6 +77,26 @@ const PageLoader = () => (
 );
 
 function App() {
+    // ── Enforce activeContext consistency for Customers ──
+    useEffect(() => {
+        const userString = localStorage.getItem('loggedInUser');
+        if (userString) {
+            try {
+                const userObject = JSON.parse(userString);
+                if (userObject.role === 'customer') {
+                    const globalBrokerId = localStorage.getItem('associatedBrokerStringId');
+                    const currentContext = localStorage.getItem('activeContext');
+                    const expected = JSON.stringify({ brokerId: globalBrokerId, customerId: userObject.id });
+                    if (currentContext !== expected) {
+                        localStorage.setItem('activeContext', expected);
+                    }
+                }
+            } catch (e) {
+                console.error('Error syncing activeContext:', e);
+            }
+        }
+    }, []);
+
     return (
         <BrowserRouter>
             <ThemeProvider>

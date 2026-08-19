@@ -1,5 +1,5 @@
 import express from "express";
-import { protect } from "../Middleware/authMiddleware.js";
+import { protect, restrictToOwnerOrBroker } from "../Middleware/authMiddleware.js";
 import UserWatchlist from "../Model/UserWatchlistModel.js";
 import Instrument from "../Model/InstrumentModel.js";
 import { resolveEffectiveBrokerIdMiddleware } from "../Middleware/resolveEffectiveBrokerId.js";
@@ -7,6 +7,8 @@ import { resolveEffectiveBrokerIdMiddleware } from "../Middleware/resolveEffecti
 const router = express.Router();
 
 router.use(resolveEffectiveBrokerIdMiddleware);
+router.use(protect);
+router.use(restrictToOwnerOrBroker);
 
 
 // @desc    Get user's watchlist

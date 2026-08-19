@@ -21,8 +21,16 @@ export const getFundsData = async () => {
         const userString = localStorage.getItem('loggedInUser');
         const userObject = userString ? JSON.parse(userString) : {};
 
-        const finalBrokerId = brokerIdVal || globalBrokerId;
-        const finalCustomerId = customerIdVal || (userObject.role === 'customer' ? userObject.id : null);
+        let finalCustomerId;
+        let finalBrokerId;
+
+        if (userObject.role === 'customer') {
+            finalCustomerId = userObject.id;
+            finalBrokerId = globalBrokerId;
+        } else {
+            finalCustomerId = customerIdVal;
+            finalBrokerId = brokerIdVal || globalBrokerId;
+        }
 
         if (!finalBrokerId || !finalCustomerId) return null;
 

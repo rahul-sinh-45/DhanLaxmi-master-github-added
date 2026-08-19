@@ -193,7 +193,7 @@ const postOrder = asyncHandler(async (req, res) => {
         }
       },
       {
-        $inc: { 
+        $inc: {
           "intraday.used_limit": requiredMargin,
           "intraday.free_limit": -requiredMargin
         }
@@ -209,7 +209,7 @@ const postOrder = asyncHandler(async (req, res) => {
         "overnight.available_limit": { $gte: requiredMargin }
       },
       {
-        $inc: { 
+        $inc: {
           "overnight.available_limit": -requiredMargin,
           "overnight.free_limit": -requiredMargin
         }
@@ -291,21 +291,21 @@ const postOrder = asyncHandler(async (req, res) => {
     if (isIntraday) {
       await Fund.updateOne(
         { broker_id_str, customer_id_str },
-        { 
-          $inc: { 
+        {
+          $inc: {
             "intraday.used_limit": -requiredMargin,
             "intraday.free_limit": requiredMargin
-          } 
+          }
         }
       );
     } else {
       await Fund.updateOne(
         { broker_id_str, customer_id_str },
-        { 
-          $inc: { 
+        {
+          $inc: {
             "overnight.available_limit": requiredMargin,
             "overnight.free_limit": requiredMargin
-          } 
+          }
         }
       );
     }
@@ -938,9 +938,9 @@ const deleteAllClosedOrders = asyncHandler(async (req, res) => {
       order_status: "CLOSED"
     });
 
-    return res.status(200).json({ 
-      success: true, 
-      message: `${result.deletedCount} orders deleted successfully` 
+    return res.status(200).json({
+      success: true,
+      message: `${result.deletedCount} orders deleted successfully`
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: "Failed to delete all orders" });
@@ -962,27 +962,27 @@ const updateClosedOrderPrices = asyncHandler(async (req, res) => {
 
   // Update logic: Only update if new values are provided
   if (price !== undefined && price !== null) {
-      order.price = Number(price);
-      order.average_price = Number(price); // Usually same for manual correction
+    order.price = Number(price);
+    order.average_price = Number(price); // Usually same for manual correction
   }
 
   if (closed_ltp !== undefined && closed_ltp !== null) {
-      order.closed_ltp = Number(closed_ltp);
+    order.closed_ltp = Number(closed_ltp);
   }
 
   if (closed_at !== undefined && closed_at !== null) {
-      order.closed_at = closed_at;
+    order.closed_at = closed_at;
   }
 
   if (placed_at !== undefined && placed_at !== null) {
-      order.placed_at = placed_at;
+    order.placed_at = placed_at;
   }
 
   if (quantity !== undefined && quantity !== null) {
-      const newQty = Number(quantity);
-      order.quantity = newQty;
-      const lotSize = order.lot_size || 1;
-      order.lots = Math.ceil(newQty / lotSize);
+    const newQty = Number(quantity);
+    order.quantity = newQty;
+    const lotSize = order.lot_size || 1;
+    order.lots = Math.ceil(newQty / lotSize);
   }
 
   // We are NOT recalculating funds here as this is a manual correction for CLOSED orders.
@@ -1024,7 +1024,7 @@ const postClosedOrder = asyncHandler(async (req, res) => {
   if (!side || !["BUY", "SELL"].includes(side)) {
     return res.status(400).json({ error: "side must be BUY or SELL" });
   }
-  
+
   const qty = Number(quantity) || (Number(lots) * Number(lot_size)) || 1;
   const entryPrice = Number(price) || 0;
   const exitPrice = Number(closed_ltp) || 0;
