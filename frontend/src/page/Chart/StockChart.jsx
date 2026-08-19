@@ -28,6 +28,7 @@ function StockChart({
   const [error, setError] = useState(null);
   const [selectedInterval, setSelectedInterval] = useState(initialInterval || '5');
   const [dateRange, setDateRange] = useState({ from: initialFrom || '', to: initialTo || '' });
+  const [chartType, setChartType] = useState('candle'); // 'candle' | 'line'
   const [isInitialized, setIsInitialized] = useState(false);
   const [liveConnectionStatus, setLiveConnectionStatus] = useState('disconnected');
 
@@ -270,53 +271,65 @@ function StockChart({
     );
 
   return (
-    <div className="bg-[var(--bg-card)] rounded-xl p-3 shadow-lg space-y-3">
+    <div className="bg-[var(--bg-card)] rounded-xl p-3 shadow-lg flex flex-col h-full w-full overflow-hidden">
       {/* Control Bar */}
-      <div className="flex flex-wrap items-center gap-3 pb-3 border-b border-[var(--border-color)]">
-        {/* Interval Selector */}
-        <div className="flex items-center gap-1 bg-[var(--bg-primary)] rounded-lg p-1">
-          <Clock className="w-4 h-4 text-[var(--text-secondary)] ml-1" />
-          {INTERVALS.map((interval) => (
-            <button
-              key={interval.value}
-              onClick={() => handleIntervalChange(interval.value)}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${selectedInterval === interval.value
-                ? 'bg-indigo-600 text-white'
-                : 'bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
-                }`}
-            >
-              {interval.label}
-            </button>
-          ))}
+      <div className="flex flex-row items-center gap-2 pb-2 border-b border-[var(--border-color)] overflow-x-auto whitespace-nowrap scrollbar-hide flex-nowrap shrink-0">
+        {/* Interval Dropdown */}
+        <div className="flex items-center gap-1.5 bg-[var(--bg-primary)] rounded-lg px-2 py-1 shrink-0">
+          <Clock className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+          <select
+            value={selectedInterval}
+            onChange={(e) => handleIntervalChange(e.target.value)}
+            className="bg-transparent text-xs text-[var(--text-primary)] font-semibold focus:outline-none cursor-pointer appearance-none outline-none"
+          >
+            {INTERVALS.map((interval) => (
+              <option key={interval.value} value={interval.value} className="bg-[var(--bg-card)] text-[var(--text-primary)]">
+                {interval.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Chart Type Dropdown */}
+        <div className="flex items-center gap-1.5 bg-[var(--bg-primary)] rounded-lg px-2 py-1 shrink-0">
+          <span className="text-xs text-[var(--text-secondary)] font-semibold">Type:</span>
+          <select
+            value={chartType}
+            onChange={(e) => setChartType(e.target.value)}
+            className="bg-transparent text-xs text-[var(--text-primary)] font-bold focus:outline-none cursor-pointer appearance-none outline-none"
+          >
+            <option value="candle" className="bg-[var(--bg-card)] text-[var(--text-primary)]">Candles</option>
+            <option value="line" className="bg-[var(--bg-card)] text-[var(--text-primary)]">Line</option>
+          </select>
         </div>
 
         {/* Date Range Picker */}
-        <div className="flex items-center gap-2 bg-[var(--bg-primary)] rounded-lg p-2 flex-1 min-w-[280px]">
-          <Calendar className="w-4 h-4 text-[var(--text-secondary)]" />
-          <div className="flex items-center gap-2 text-xs flex-1">
+        <div className="flex items-center gap-1.5 bg-[var(--bg-primary)] rounded-lg px-2 py-1 shrink-0">
+          <Calendar className="w-3.5 h-3.5 text-[var(--text-secondary)]" />
+          <div className="flex items-center gap-1 text-[11px] sm:text-xs">
             <input
               type="date"
               value={dateRange.from}
               onChange={(e) => handleDateChange('from', e.target.value)}
               max={dateRange.to}
-              className="bg-transparent text-[var(--text-secondary)] border border-[var(--border-color)] rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+              className="bg-transparent text-[var(--text-secondary)] border-none px-0.5 py-0.5 focus:outline-none focus:text-indigo-500 w-[95px] shrink-0 font-medium cursor-pointer"
             />
-            <span className="text-[var(--text-muted)]">to</span>
+            <span className="text-[var(--text-muted)]">-</span>
             <input
               type="date"
               value={dateRange.to}
               onChange={(e) => handleDateChange('to', e.target.value)}
               min={dateRange.from}
               max={new Date().toISOString().slice(0, 10)}
-              className="bg-transparent text-[var(--text-secondary)] border border-[var(--border-color)] rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+              className="bg-transparent text-[var(--text-secondary)] border-none px-0.5 py-0.5 focus:outline-none focus:text-indigo-500 w-[95px] shrink-0 font-medium cursor-pointer"
             />
           </div>
         </div>
 
         {/* Info Badge */}
         {currentInterval.type === 'intraday' && (
-          <div className="text-xs text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded border border-yellow-400/20">
-            Max 90 days for intraday
+          <div className="text-[10px] text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20 shrink-0 hidden sm:block">
+            Max 90d
           </div>
         )}
 
@@ -333,14 +346,14 @@ function StockChart({
             }
           }}
           title="Toggle Fullscreen"
-          className="p-2 bg-[var(--bg-primary)] text-[var(--text-secondary)] rounded-lg hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition ml-auto"
+          className="p-1 bg-[var(--bg-primary)] text-[var(--text-secondary)] rounded hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] transition ml-auto shrink-0"
         >
-          <Maximize2 className="w-4 h-4" />
+          <Maximize2 className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* Chart Container */}
-      <div className="chart-container space-y-3">
+      <div className="chart-container flex-1 flex flex-col min-h-0 w-full pt-2">
         {/* Live Connection Status Badge */}
         {currentInterval.type === 'intraday' && (
           <div className="flex items-center justify-center gap-2 py-1">
@@ -372,18 +385,19 @@ function StockChart({
         )}
 
         {/* Trading Chart */}
-        <div style={{ height: '500px', width: '100%' }}>
+        <div className="flex-1 w-full min-h-[300px] relative">
           <TradingChart
             candles={candles}
             symbol={displayName}
             interval={selectedInterval}
+            chartType={chartType}
             isLiveEnabled={currentInterval.type === 'intraday' && liveConnectionStatus === 'connected'}
             loading={loading}
           />
         </div>
 
         {/* Data Info */}
-        <div className="text-xs text-[var(--text-muted)] text-center pt-2 border-t border-[var(--border-color)]">
+        <div className="text-xs text-[var(--text-muted)] text-center pt-2 mt-2 border-t border-[var(--border-color)] shrink-0">
           Showing {candles.length} candles • {currentInterval.label} interval
           {liveConnectionStatus === 'connected' && currentInterval.type === 'intraday' && (
             <span className="text-green-400 ml-2">• Live updating</span>

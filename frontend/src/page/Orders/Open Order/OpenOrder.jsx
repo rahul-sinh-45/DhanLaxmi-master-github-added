@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useMarketData } from "../../../contexts/MarketDataContext.jsx";
 import { AlertTriangle } from "lucide-react";
 import OpenOrderBottomWindow from "./OpenOderBottomWindow.jsx";
-import { calculatePnLAndBrokerage } from "../../../Utils/calculateBrokerage.jsx";
+import { calculatePnLAndBrokerage, formatTradingSymbolNew } from "../../../Utils/calculateBrokerage.jsx";
 import LockedButtonWrapper from "../../../components/LockedButtonWrapper";
 
 const money = (n) => `₹${Number(n ?? 0).toFixed(2)}`;
@@ -57,9 +57,15 @@ export default function OpenOrder({ filter }) {
       const ltp = Number(data.snapshot?.ltp || data.ltp || data.price || 0);
       const isBuy = String(data.side || "").toUpperCase() === "BUY";
       const jpValue = Number(data.jobbing_point || 0);
-      let closedLtp = ltp;
-      if (jpValue > 0 && closedLtp > 0) {
-        closedLtp = isBuy ? closedLtp - jpValue : closedLtp + jpValue;
+      let closedLtp;
+      if (Number(data.customer_exit_price || 0) > 0) {
+        closedLtp = Number(data.customer_exit_price);
+      } else {
+        const refLtp = Number(data.jobbing_applied_ltp || 0) || ltp;
+        closedLtp = refLtp;
+        if (jpValue > 0 && closedLtp > 0) {
+          closedLtp = isBuy ? closedLtp - jpValue : closedLtp + jpValue;
+        }
       }
 
       const payload = {
@@ -83,6 +89,36 @@ export default function OpenOrder({ filter }) {
       }
     } catch (err) {
       console.error("Exit failed", err);
+    } finally {
+      setIsProcessingId(null);
+    }
+  };
+
+  const handleRestrictOrder = async (data) => {
+    if (isProcessingId) return;
+    setIsProcessingId(data._id);
+    try {
+      const payload = {
+        broker_id_str: brokerId,
+        customer_id_str: customerId,
+        order_id: data._id,
+        order_status: "RESTRICTED",
+        came_From: "Open",
+        closed_at: new Date().toISOString()
+      };
+
+      const res = await fetch(`${apiBase.replace(/\/$/, "")}/api/orders/updateOrder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        window.dispatchEvent(new CustomEvent('orders:changed'));
+        fetchInstrumentData();
+      }
+    } catch (err) {
+      console.error("Restriction failed", err);
     } finally {
       setIsProcessingId(null);
     }
@@ -482,12 +518,8 @@ export default function OpenOrder({ filter }) {
           const avg = Number(data.price ?? 0);
           const qty = Number(data?.quantity ?? 0);
 
-          // Apply Jobbing Point deduction to the current LTP for PnL calculation
-          const jpValue = Number(data.jobbing_point || 0);
+          // (Jobbing Point applied ONLY upon execution of Exit, not on Display)
           let pnlLtp = ltp;
-          if (jpValue > 0 && pnlLtp > 0) {
-              pnlLtp = isBuy ? pnlLtp - jpValue : pnlLtp + jpValue;
-          }
 
           const {
             totalBrokerage,
@@ -523,7 +555,7 @@ export default function OpenOrder({ filter }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <h4 className="text-[var(--text-primary)] font-black text-base uppercase tracking-tight truncate">
-                      {tradingsymbol || "—"}
+                      {formatTradingSymbolNew(tradingsymbol) || "—"}
                     </h4>
                     <span className="text-[7px] font-black text-[var(--text-muted)] bg-[var(--bg-primary)] px-1.5 py-0.5 rounded uppercase">
                       {data.segment || "NFO"}
@@ -567,25 +599,63 @@ export default function OpenOrder({ filter }) {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3">
-                <LockedButtonWrapper featureId="modify_order" className="flex-1">
-                  <button
-                    onClick={() => handleOrderSelect(data)}
-                    className="w-full py-3.5 bg-[#3b82f6] text-white text-[11px] font-black uppercase tracking-[2px] rounded-2xl hover:brightness-110 active:scale-[0.98] transition-all  "
-                  >
-                    Modify
-                  </button>
-                </LockedButtonWrapper>
+              <div className="flex flex-col justify-between gap-2 w-full">
+                {userRole === 'broker' ? (
+                  <>
+                    {/* Row 1: Modify & Restrict */}
+                    <div className="flex gap-5 w-full">
+                      <LockedButtonWrapper featureId="modify_order" className="flex-1">
+                        <button
+                          onClick={() => handleOrderSelect(data)}
+                          className="w-full py-3.5 bg-[#3b82f6] text-white text-[11px] font-black uppercase tracking-[2px] rounded-2xl hover:brightness-110 active:scale-[0.98] transition-all"
+                        >
+                          Modify
+                        </button>
+                      </LockedButtonWrapper>
 
-                <LockedButtonWrapper featureId="cancel_order" className="flex-1">
-                  <button
-                    onClick={() => handleSingleExit(data)}
-                    disabled={isProcessingId === data._id}
-                    className={`w-full py-3.5 bg-[#f23645] text-white text-[11px] font-black uppercase tracking-[2px] rounded-2xl hover:brightness-110 active:scale-[0.98] transition-all  ${isProcessingId === data._id ? 'opacity-50' : ''}`}
-                  >
-                    {isProcessingId === data._id ? 'Exiting...' : 'Exit'}
-                  </button>
-                </LockedButtonWrapper>
+                      <button
+                        onClick={() => handleRestrictOrder(data)}
+                        disabled={isProcessingId === data._id}
+                        className={`flex-1 py-3.5 px-7 bg-amber-500 text-white text-[11px] font-black uppercase tracking-[2px] rounded-2xl hover:brightness-110 active:scale-[0.98] transition-all ${isProcessingId === data._id ? 'opacity-50' : ''}`}
+                      >
+                        Restrict
+                      </button>
+                    </div>
+
+                    {/* Row 2: Exit */}
+                    <LockedButtonWrapper featureId="cancel_order" className="w-full">
+                      <button
+                        onClick={() => handleSingleExit(data)}
+                        disabled={isProcessingId === data._id}
+                        className={`w-full py-3.5 bg-[#f23645] text-white text-[11px] font-black uppercase tracking-[2px] rounded-2xl hover:brightness-110 active:scale-[0.98] transition-all ${isProcessingId === data._id ? 'opacity-50' : ''}`}
+                      >
+                        {isProcessingId === data._id ? 'Exiting...' : 'Exit'}
+                      </button>
+                    </LockedButtonWrapper>
+                  </>
+                ) : (
+                  /* Customer: Modify & Exit in one row */
+                  <div className="flex gap-2 w-full">
+                    <LockedButtonWrapper featureId="modify_order" className="flex-1">
+                      <button
+                        onClick={() => handleOrderSelect(data)}
+                        className="w-full py-3.5 bg-[#3b82f6] text-white text-[11px] font-black uppercase tracking-[2px] rounded-2xl hover:brightness-110 active:scale-[0.98] transition-all"
+                      >
+                        Modify
+                      </button>
+                    </LockedButtonWrapper>
+
+                    <LockedButtonWrapper featureId="cancel_order" className="flex-1">
+                      <button
+                        onClick={() => handleSingleExit(data)}
+                        disabled={isProcessingId === data._id}
+                        className={`w-full py-3.5 bg-[#f23645] text-white text-[11px] font-black uppercase tracking-[2px] rounded-2xl hover:brightness-110 active:scale-[0.98] transition-all ${isProcessingId === data._id ? 'opacity-50' : ''}`}
+                      >
+                        {isProcessingId === data._id ? 'Exiting...' : 'Exit'}
+                      </button>
+                    </LockedButtonWrapper>
+                  </div>
+                )}
               </div>
             </li>
           );

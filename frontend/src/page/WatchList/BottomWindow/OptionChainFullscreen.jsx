@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { X, RefreshCw, AlertCircle, Loader, TrendingDown, ChevronDown } from 'lucide-react';
 import { useOptionChain } from '../../../hooks/useOptionChain';
 import OptionStrikeBottomWindow from './OptionStrikeBottomWindow';
 import StockChart from '../../Chart/StockChart';
+import LockedButtonWrapper from '../../../components/LockedButtonWrapper';
 
 // Strike count options
 const STRIKE_OPTIONS = [
@@ -16,6 +17,27 @@ const STRIKE_OPTIONS = [
 const AUTO_REFRESH_INTERVAL = 5000;
 
 const OptionChainFullscreen = ({ selectedStock, sheetData, onClose, brokerId, customerId, initialTab = 'Charts' }) => {
+    const prevLtpRef = useRef({});
+
+    const styleTag = (
+        <style dangerouslySetInnerHTML={{__html: `
+            @keyframes blink-green-bg {
+                0% { background-color: rgba(34, 197, 94, 0.4); color: #22c55e !important; }
+                100% { background-color: transparent; }
+            }
+            @keyframes blink-red-bg {
+                0% { background-color: rgba(239, 68, 68, 0.4); color: #ef4444 !important; }
+                100% { background-color: transparent; }
+            }
+            .flash-green-bg {
+                animation: blink-green-bg 1s ease-out;
+            }
+            .flash-red-bg {
+                animation: blink-red-bg 1s ease-out;
+            }
+        `}} />
+    );
+
     // Tab State: 'Charts' | 'OptionChain'
     const [activeTab, setActiveTab] = useState(initialTab);
     
@@ -37,9 +59,10 @@ const OptionChainFullscreen = ({ selectedStock, sheetData, onClose, brokerId, cu
         expiries,
         loading,
         error,
+        segment: chainSegment,
         refetch
     } = useOptionChain({
-        name: selectedStock?.name,
+        name: selectedStock?.tradingSymbol || selectedStock?.name,
         segment: selectedStock?.segment,
         expiry: selectedExpiry
     });
@@ -48,7 +71,7 @@ const OptionChainFullscreen = ({ selectedStock, sheetData, onClose, brokerId, cu
     // We can also check segment usually (NFO/MCX), but this hook data is a good proxy.
     // If loading, we assume it might be available to avoid flickering.
     const hasOptions = useMemo(() => {
-        if (selectedStock?.segment === 'NFO' || selectedStock?.segment === 'MCX') return true;
+        if (selectedStock?.segment === 'NFO' || selectedStock?.segment === 'MCX' || selectedStock?.segment === 'INDICES') return true;
         return (expiries && expiries.length > 0) || (chainData && chainData.length > 0);
     }, [selectedStock, expiries, chainData]);
 
@@ -144,6 +167,21 @@ const OptionChainFullscreen = ({ selectedStock, sheetData, onClose, brokerId, cu
         return Number(value).toFixed(2);
     };
 
+    const formatVolume = (value) => {
+        if (value === undefined || value === null || isNaN(value) || value === 0) return '—';
+        const num = Number(value);
+        if (num >= 10000000) {
+            return `${(num / 10000000).toFixed(2)}Cr`;
+        }
+        if (num >= 100000) {
+            return `${(num / 100000).toFixed(2)}L`;
+        }
+        if (num >= 1000) {
+            return `${(num / 1000).toFixed(1)}K`;
+        }
+        return num.toString();
+    };
+
     // --- Renderers ---
 
     const renderHeader = () => (
@@ -226,18 +264,72 @@ const OptionChainFullscreen = ({ selectedStock, sheetData, onClose, brokerId, cu
     );
 
     const renderChart = () => (
-        <div className="flex-1 w-full h-full bg-[var(--bg-primary)] overflow-hidden">
-            {/* We simply mount StockChart here. It handles its own data fetching. */}
-            {/* We assume selectedStock has instrument_token. */}
-            {selectedStock?.instrument_token ? (
-                <StockChart
-                    instrument_token={selectedStock.instrument_token}
-                    tradingSymbol={selectedStock.tradingSymbol || selectedStock.name}
-                // Optional: pass initial headers if needed
-                />
-            ) : (
-                <div className="flex items-center justify-center h-full text-[var(--text-secondary)]">
-                    No Instrument Token for Chart
+        <div className="flex-1 w-full h-full bg-[var(--bg-primary)] overflow-hidden relative flex flex-col">
+            <div className="flex-1 overflow-hidden">
+                {selectedStock?.instrument_token ? (
+                    <StockChart
+                        instrument_token={selectedStock.instrument_token}
+                        tradingSymbol={selectedStock.tradingSymbol || selectedStock.name}
+                    />
+                ) : (
+                    <div className="flex items-center justify-center h-full text-[var(--text-secondary)]">
+                        No Instrument Token for Chart
+                    </div>
+                )}
+            </div>
+            {selectedStock?.instrument_token && (
+                <div className="px-4 py-3 bg-[var(--bg-card)] border-t border-[var(--border-color)] flex gap-3 z-10 flex-shrink-0">
+                    {selectedStock?.segment === 'INDICES' ? (
+                        <>
+                            <button
+                                onClick={() => setActiveTab('OptionChain')}
+                                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-center"
+                            >
+                                CALL
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('OptionChain')}
+                                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-600/20 active:scale-95 transition-all text-center"
+                            >
+                                PUT
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <LockedButtonWrapper featureId="buy" className="flex-1">
+                                <button
+                                    onClick={() => setSelectedStrike({
+                                        strike: null,
+                                        type: 'CE',
+                                        instrumentToken: selectedStock.instrument_token,
+                                        tradingSymbol: selectedStock.tradingSymbol || selectedStock.name,
+                                        lot_size: selectedStock.lot_size || selectedStock.lotSize || 1,
+                                        expiry: selectedStock.expiry,
+                                        initialActionTab: 'Buy'
+                                    })}
+                                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-center"
+                                >
+                                    BUY
+                                </button>
+                            </LockedButtonWrapper>
+                            <LockedButtonWrapper featureId="sell" className="flex-1">
+                                <button
+                                    onClick={() => setSelectedStrike({
+                                        strike: null,
+                                        type: 'PE',
+                                        instrumentToken: selectedStock.instrument_token,
+                                        tradingSymbol: selectedStock.tradingSymbol || selectedStock.name,
+                                        lot_size: selectedStock.lot_size || selectedStock.lotSize || 1,
+                                        expiry: selectedStock.expiry,
+                                        initialActionTab: 'Sell'
+                                    })}
+                                    className="w-full py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg shadow-red-600/20 active:scale-95 transition-all text-center"
+                                >
+                                    SELL
+                                </button>
+                            </LockedButtonWrapper>
+                        </>
+                    )}
                 </div>
             )}
         </div>
@@ -272,31 +364,87 @@ const OptionChainFullscreen = ({ selectedStock, sheetData, onClose, brokerId, cu
             <div className="flex-1 overflow-hidden flex flex-col px-2 pt-2 pb-2">
                 <div className="w-full max-w-3xl mx-auto flex flex-col flex-1 overflow-hidden bg-[var(--bg-card)] rounded-lg border border-[var(--border-color)]">
                     {/* Sticky Header */}
-                    <div className="grid grid-cols-3 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] text-xs font-semibold py-2 flex-shrink-0 sticky top-0 z-10">
+                    <div className="grid grid-cols-5 bg-[var(--bg-secondary)] border-b border-[var(--border-color)] text-xs font-semibold py-2 flex-shrink-0 sticky top-0 z-10">
+                        <div className="text-center text-[var(--text-secondary)]">Call Vol</div>
                         <div className="text-center text-green-400">Call LTP</div>
                         <div className="text-center text-[var(--text-secondary)] border-x border-[var(--border-color)]">Strike</div>
                         <div className="text-center text-red-400">Put LTP</div>
+                        <div className="text-center text-[var(--text-secondary)]">Put Vol</div>
                     </div>
                     {/* Scrollable Body */}
                     <div className="overflow-y-auto flex-1">
                         {filteredChain.map(row => {
                             const isATM = row.strike === atmStrike;
+
+                            const callToken = row.call?.instrument_token;
+                            const prevCallLtp = callToken ? prevLtpRef.current[callToken] : undefined;
+                            const currentCallLtp = row.call?.ltp;
+                            let callBlinkClass = "";
+                            if (callToken && prevCallLtp !== undefined && currentCallLtp !== prevCallLtp) {
+                                callBlinkClass = currentCallLtp > prevCallLtp ? "flash-green-bg" : "flash-red-bg";
+                            }
+                            if (callToken && currentCallLtp !== undefined) {
+                                prevLtpRef.current[callToken] = currentCallLtp;
+                            }
+
+                            const putToken = row.put?.instrument_token;
+                            const prevPutLtp = putToken ? prevLtpRef.current[putToken] : undefined;
+                            const currentPutLtp = row.put?.ltp;
+                            let putBlinkClass = "";
+                            if (putToken && prevPutLtp !== undefined && currentPutLtp !== prevPutLtp) {
+                                putBlinkClass = currentPutLtp > prevPutLtp ? "flash-green-bg" : "flash-red-bg";
+                            }
+                            if (putToken && currentPutLtp !== undefined) {
+                                prevLtpRef.current[putToken] = currentPutLtp;
+                            }
+
                             return (
-                                <div key={row.strike} className={`grid grid-cols-3 border-b border-[var(--border-color)] last:border-b-0 text-sm ${isATM ? 'bg-yellow-500/10' : ''}`}>
+                                <div key={row.strike} className={`grid grid-cols-5 border-b border-[var(--border-color)] last:border-b-0 text-sm ${isATM ? 'bg-yellow-500/10' : ''}`}>
+                                    {/* Call Volume */}
+                                    <div className="p-2 text-center text-xs text-[var(--text-muted)] border-r border-[var(--border-color)] flex items-center justify-center">
+                                        {formatVolume(row.call?.volume)}
+                                    </div>
+
+                                    {/* Call LTP */}
                                     <div
-                                        className={`p-2 text-center cursor-pointer hover:bg-green-500/10 ${row.call?.ltp ? 'text-green-400' : 'text-[var(--text-muted)]'}`}
-                                        onClick={() => row.call?.instrument_token && setSelectedStrike({ strike: row.strike, type: 'CE', instrumentToken: row.call.instrument_token, expiry: selectedExpiry || expiries?.[0] })}
+                                        key={`call-${callToken}-${currentCallLtp}`}
+                                        className={`p-2 text-center cursor-pointer hover:bg-green-500/10 flex items-center justify-center border-r border-[var(--border-color)] ${callBlinkClass} ${row.call?.ltp ? 'text-green-400' : 'text-[var(--text-muted)]'}`}
+                                        onClick={() => row.call?.instrument_token && setSelectedStrike({ 
+                                            strike: row.strike, 
+                                            type: 'CE', 
+                                            instrumentToken: row.call.instrument_token, 
+                                            tradingSymbol: row.call.tradingsymbol,
+                                            lot_size: row.call.lot_size,
+                                            expiry: selectedExpiry || expiries?.[0] 
+                                        })}
                                     >
                                         {formatLTP(row.call?.ltp)}
                                     </div>
-                                    <div className={`p-2 text-center font-medium border-x border-[var(--border-color)] ${isATM ? 'text-yellow-400' : 'text-[var(--text-primary)]'}`}>
+
+                                    {/* Strike */}
+                                    <div className={`p-2 text-center font-medium border-r border-[var(--border-color)] flex items-center justify-center ${isATM ? 'text-yellow-400' : 'text-[var(--text-primary)]'}`}>
                                         {row.strike}
                                     </div>
+
+                                    {/* Put LTP */}
                                     <div
-                                        className={`p-2 text-center cursor-pointer hover:bg-red-500/10 ${row.put?.ltp ? 'text-red-400' : 'text-[var(--text-muted)]'}`}
-                                        onClick={() => row.put?.instrument_token && setSelectedStrike({ strike: row.strike, type: 'PE', instrumentToken: row.put.instrument_token, expiry: selectedExpiry || expiries?.[0] })}
+                                        key={`put-${putToken}-${currentPutLtp}`}
+                                        className={`p-2 text-center cursor-pointer hover:bg-red-500/10 flex items-center justify-center border-r border-[var(--border-color)] ${putBlinkClass} ${row.put?.ltp ? 'text-red-400' : 'text-[var(--text-muted)]'}`}
+                                        onClick={() => row.put?.instrument_token && setSelectedStrike({ 
+                                            strike: row.strike, 
+                                            type: 'PE', 
+                                            instrumentToken: row.put.instrument_token, 
+                                            tradingSymbol: row.put.tradingsymbol,
+                                            lot_size: row.put.lot_size,
+                                            expiry: selectedExpiry || expiries?.[0] 
+                                        })}
                                     >
                                         {formatLTP(row.put?.ltp)}
+                                    </div>
+
+                                    {/* Put Volume */}
+                                    <div className="p-2 text-center text-xs text-[var(--text-muted)] flex items-center justify-center">
+                                        {formatVolume(row.put?.volume)}
                                     </div>
                                 </div>
                             );
@@ -309,6 +457,7 @@ const OptionChainFullscreen = ({ selectedStock, sheetData, onClose, brokerId, cu
 
     return (
         <div className="flex flex-col w-full h-full bg-[var(--bg-primary)] text-[var(--text-primary)]">
+            {styleTag}
             {renderHeader()}
 
             {activeTab === 'Charts' ? renderChart() : renderOptionChainBody()}
@@ -320,9 +469,12 @@ const OptionChainFullscreen = ({ selectedStock, sheetData, onClose, brokerId, cu
                 optionType={selectedStrike?.type}
                 strikePrice={selectedStrike?.strike}
                 instrumentToken={selectedStrike?.instrumentToken}
+                tradingSymbol={selectedStrike?.tradingSymbol}
+                segment={chainSegment}
                 underlyingStock={selectedStock}
                 spotPrice={currentPrice}
                 expiry={selectedStrike?.expiry}
+                lot_size_prop={selectedStrike?.lot_size}
                 brokerId={brokerId}
                 customerId={customerId}
             />

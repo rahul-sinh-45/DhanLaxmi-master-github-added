@@ -332,7 +332,7 @@ function StockChart({ symbol, tradingSymbol }) {
     return {
       x: c.x,
       y: c.volume,
-      fillColor: isUp ? '#00B746' : '#EF403C'
+      fillColor: isUp ? '#089981' : '#f23645'
     };
   });
 
@@ -401,8 +401,8 @@ function StockChart({ symbol, tradingSymbol }) {
     plotOptions: {
       candlestick: {
         colors: {
-          upward: '#00B746',
-          downward: '#EF403C'
+          upward: '#089981',
+          downward: '#f23645'
         },
         wick: {
           useFillColor: true
@@ -546,51 +546,50 @@ function StockChart({ symbol, tradingSymbol }) {
   return (
     <div className="bg-[#1A1F30] rounded-xl p-3 shadow-lg space-y-3">
       {/* Control Bar */}
-      <div className="flex flex-wrap items-center gap-3 pb-3 border-b border-white/10">
-        {/* Interval Selector */}
-        <div className="flex items-center gap-1 bg-[#0E1324] rounded-lg p-1">
-          <Clock className="w-4 h-4 text-gray-400 ml-1" />
-          {INTERVALS.map((interval) => (
-            <button
-              key={interval.value}
-              onClick={() => handleIntervalChange(interval.value)}
-              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${selectedInterval === interval.value
-                ? 'bg-indigo-600 text-white'
-                : 'bg-transparent text-gray-400 hover:text-white hover:bg-white/5'
-                }`}
-            >
-              {interval.label}
-            </button>
-          ))}
+      <div className="flex flex-row items-center gap-2 pb-2 border-b border-white/10 overflow-x-auto whitespace-nowrap scrollbar-hide flex-nowrap">
+        {/* Interval Dropdown */}
+        <div className="flex items-center gap-1.5 bg-[#0E1324] rounded-lg px-2 py-1 shrink-0">
+          <Clock className="w-3.5 h-3.5 text-gray-400" />
+          <select
+            value={selectedInterval}
+            onChange={(e) => handleIntervalChange(e.target.value)}
+            className="bg-transparent text-xs text-white font-semibold focus:outline-none cursor-pointer appearance-none outline-none"
+          >
+            {INTERVALS.map((interval) => (
+              <option key={interval.value} value={interval.value} className="bg-[#1A1F30] text-white">
+                {interval.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Date Range Picker */}
-        <div className="flex items-center gap-2 bg-[#0E1324] rounded-lg p-2 flex-1 min-w-[280px]">
-          <Calendar className="w-4 h-4 text-gray-400" />
-          <div className="flex items-center gap-2 text-xs flex-1">
+        <div className="flex items-center gap-1.5 bg-[#0E1324] rounded-lg px-2 py-1 shrink-0">
+          <Calendar className="w-3.5 h-3.5 text-gray-400" />
+          <div className="flex items-center gap-1 text-[11px] sm:text-xs">
             <input
               type="date"
               value={dateRange.from}
               onChange={(e) => handleDateChange('from', e.target.value)}
               max={dateRange.to}
-              className="bg-transparent text-gray-300 border border-white/10 rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+              className="bg-transparent text-gray-300 border-none px-0.5 py-0.5 focus:outline-none focus:text-indigo-400 w-[95px] shrink-0 font-medium cursor-pointer"
             />
-            <span className="text-gray-500">to</span>
+            <span className="text-gray-500">-</span>
             <input
               type="date"
               value={dateRange.to}
               onChange={(e) => handleDateChange('to', e.target.value)}
               min={dateRange.from}
               max={new Date().toISOString().slice(0, 10)}
-              className="bg-transparent text-gray-300 border border-white/10 rounded px-2 py-1 focus:outline-none focus:border-indigo-500"
+              className="bg-transparent text-gray-300 border-none px-0.5 py-0.5 focus:outline-none focus:text-indigo-400 w-[95px] shrink-0 font-medium cursor-pointer"
             />
           </div>
         </div>
 
         {/* Info Badge */}
         {currentInterval.type === 'intraday' && (
-          <div className="text-xs text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded border border-yellow-400/20">
-            Max 90 days for intraday
+          <div className="text-[10px] text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20 shrink-0 hidden sm:block">
+            Max 90d
           </div>
         )}
       </div>

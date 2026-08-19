@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   User, Shield, IdCard, LogOut, UserCheck, Moon, Sun, Loader2, Camera,
   ChevronRight, BookOpen, CreditCard, HelpCircle, Info, Settings,
-  CheckCircle, Building2, Pencil, X, Download
+  CheckCircle, Building2, Pencil, X, Download, PlusCircle
 } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext";
 import { usePWA } from "../../contexts/PWAContext";
@@ -109,9 +109,19 @@ export default function Profile() {
     { icon: CreditCard, label: "Payments", onClick: () => navigate("/funds") },
     ...(isBrokerViewingCustomer ? [
       { 
+        icon: PlusCircle, 
+        label: "Custome Close Order", 
+        onClick: () => navigate(`/orders/add-closed-order?customerId=${viewingCustomerId}`) 
+      },
+      { 
         icon: Shield, 
         label: "Feature Controls", 
         onClick: () => navigate(`/profile/permissions?customerId=${viewingCustomerId}`) 
+      },
+      { 
+        icon: Settings, 
+        label: "Advance Jobbing", 
+        onClick: () => navigate(`/profile/advance-jobbing?customerId=${viewingCustomerId}`) 
       }
     ] : []),
    

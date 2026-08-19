@@ -1,7 +1,11 @@
 import express from 'express';
 import { updateNetAvailableBalance, updateNetPnl, getFunds, updateIntradayAvailabeLimit , updateOvernightAvailableLimit, updateIntradayLimitsAll, updateOvernightLimitsAll, updateOptionLimitsAll, updateMcxLimitsAll, updateBrokerMobile, updateOptionLimitPercentage, updateMcxLimitPercentage, getCustomerJobbing, updateCustomerJobbing, updatePaymentDetails, updateWithdrawalLimits, getWithdrawalLimits, updateMcxDeposit, updateMcxAvailableLimit, updateMcxOptionLimitPercentage, updateMcxOptionLimitsAll} from '../Controllers/fundController.js';
+import { resolveEffectiveBrokerIdMiddleware } from '../Middleware/resolveEffectiveBrokerId.js';
 
 const router = express.Router();
+
+router.use(resolveEffectiveBrokerIdMiddleware);
+
 
 router.put('/updateNetAvailableBalance', updateNetAvailableBalance);
 router.put('/updateNetPnl', updateNetPnl);

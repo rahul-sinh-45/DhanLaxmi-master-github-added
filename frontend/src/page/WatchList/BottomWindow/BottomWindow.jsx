@@ -15,6 +15,7 @@ import SummaryView from './Summery';
 import MarketDepthView from './marketDepth';
 import OptionChainFullscreen from './OptionChainFullscreen';
 import LockedButtonWrapper from '../../../components/LockedButtonWrapper';
+import { formatTradingSymbol } from '../../../Utils/calculateBrokerage.jsx';
 
 function BottomWindow({
   selectedStock,
@@ -265,7 +266,7 @@ function BottomWindow({
 
 
         {/* Header - Always Visible */}
-        <div className="flex justify-between items-center p-4 border-b border-[#2a2e39] bg-[#1e222d]">
+        <div className="flex justify-between items-center p-4 border-b border-[var(--border-color)] bg-[var(--bg-card)]">
 
           <div className="flex items-center gap-3 min-w-0 flex-1">
             {(viewMode === 'Order' || viewMode === 'MarketDepth' || viewMode === 'OptionChain' || viewMode === 'Chart') && (
@@ -278,7 +279,7 @@ function BottomWindow({
               </button>
             )}
             <h3 className="text-[var(--text-primary)] text-base sm:text-lg font-bold truncate">
-              {selectedStock.tradingSymbol || selectedStock.name}
+              {formatTradingSymbol(selectedStock.tradingSymbol || selectedStock.name)}
             </h3>
             {/* Optional: Show LTP/Change here too? */}
           </div>

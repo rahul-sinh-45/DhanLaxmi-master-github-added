@@ -60,7 +60,7 @@ const OrderSchema = new mongoose.Schema(
     // Open/Closed == UI filter; CLOSED when fully filled/cancelled/rejected
     order_status: {
       type: String,
-      enum: ["OPEN", "CLOSED", "HOLD"],
+      enum: ["OPEN", "CLOSED", "HOLD", "RESTRICTED"],
       default: "OPEN",
       index: true,
     },
@@ -97,6 +97,18 @@ const OrderSchema = new mongoose.Schema(
     // BUY exit: closed_ltp = LTP - jobbing_point
     // SELL exit: closed_ltp = LTP + jobbing_point
     jobbing_point: {
+      type: Number,
+      default: 0,
+    },
+
+    // LTP at the time the jobbing point was set/saved
+    jobbing_applied_ltp: {
+      type: Number,
+      default: 0,
+    },
+
+    // Fixed exit price set by broker for the customer
+    customer_exit_price: {
       type: Number,
       default: 0,
     },

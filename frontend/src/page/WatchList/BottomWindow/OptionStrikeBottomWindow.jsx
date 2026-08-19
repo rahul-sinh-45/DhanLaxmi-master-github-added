@@ -3,6 +3,8 @@ import { X, TrendingDown, TrendingUp, ArrowLeft } from 'lucide-react';
 import { logMarketStatus } from '../../../Utils/marketStatus.js'
 import { getFundsData } from '../../../Utils/fetchFund.jsx';
 import { useMarketData } from '../../../contexts/MarketDataContext';
+import { formatTradingSymbol } from '../../../Utils/calculateBrokerage.jsx';
+import LockedButtonWrapper from '../../../components/LockedButtonWrapper';
 
 const OptionStrikeBottomWindow = ({
     isOpen,
@@ -13,18 +15,23 @@ const OptionStrikeBottomWindow = ({
     underlyingStock,     // Object (Parent Info)
     spotPrice,           // Number
     expiry,              // String
+    tradingSymbol,       // String (optional, exact symbol from backend)
+    segment,             // String (optional, exact segment from backend)
+    lot_size_prop,       // NUMBER (optional, passed from strike)
     brokerId,
     customerId,
+    initialActionTab = 'Buy',
 }) => {
     // --- Market Data Context ---
     const { subscribe, unsubscribe, ticksRef } = useMarketData();
 
     // --- Local States ---
-    const [actionTab, setActionTab] = useState('Buy');
+    const [actionTab, setActionTab] = useState(initialActionTab || 'Buy');
     const [productType, setProductType] = useState('Intraday');
     const [localLotsStr, setLocalLotsStr] = useState('1');
     const [jobbin_price, setJobbin_price] = useState("0.08");
     const [jobbin_type, setJobbin_type] = useState("percentage"); // "percentage" or "points"
+    const [advancedRanges, setAdvancedRanges] = useState([]);
 
     const [submitting, setSubmitting] = useState(false);
     const [feedback, setFeedback] = useState(null);
@@ -55,22 +62,28 @@ const OptionStrikeBottomWindow = ({
     const bestAsk = liveDataFull?.bestAskPrice || liveData?.bestAskPrice || 0;
 
     // Lot Size
-    const lotSize = underlyingStock?.lot_size || underlyingStock?.lotSize || 50;
+    const lotSize = lot_size_prop || underlyingStock?.lot_size || underlyingStock?.lotSize || 50;
 
     // Reset on Open + Fetch jobbing from DB
     useEffect(() => {
         if (isOpen) {
             setLocalLotsStr('1');
             setFeedback(null);
-            setActionTab('Buy');
+            setActionTab(initialActionTab || 'Buy');
             setProductType('Intraday');
             // Fetch jobbing from DB for this customer
             const fetchJobbing = async () => {
                 try {
                     const activeContextString = localStorage.getItem('activeContext');
                     const activeContext = activeContextString ? JSON.parse(activeContextString) : {};
-                    const effectiveBrokerId = brokerId || activeContext.brokerId;
-                    const effectiveCustomerId = customerId || activeContext.customerId;
+                    const globalBrokerId = localStorage.getItem('associatedBrokerStringId');
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const urlCustomerId = urlParams.get('customerId');
+                    const userString = localStorage.getItem('loggedInUser');
+                    const userObject = userString ? JSON.parse(userString) : {};
+
+                    const effectiveBrokerId = brokerId || activeContext.brokerId || globalBrokerId;
+                    const effectiveCustomerId = customerId || activeContext.customerId || urlCustomerId || (userObject.role === 'customer' ? userObject.id : null);
 
                     if (!effectiveBrokerId || !effectiveCustomerId) return;
 
@@ -81,6 +94,15 @@ const OptionStrikeBottomWindow = ({
                         if (data.success && data.jobbing) {
                             setJobbin_price(String(data.jobbing.price ?? 0.08));
                             setJobbin_type(data.jobbing.type || 'percentage');
+                        }
+                    }
+
+                    // Fetch advanced jobbing
+                    const resAdv = await fetch(`${apiBase}/api/advanced-jobbing?broker_id_str=${effectiveBrokerId}&customer_id_str=${effectiveCustomerId}`);
+                    if (resAdv.ok) {
+                        const dataAdv = await resAdv.json();
+                        if (dataAdv.success) {
+                            setAdvancedRanges(dataAdv.ranges || []);
                         }
                     }
                 } catch (err) {
@@ -145,29 +167,49 @@ const OptionStrikeBottomWindow = ({
         return lotsNum * lotSize;
     }, [lotsNum, lotSize]);
 
+    const activeJobbing = useMemo(() => {
+        const ltpVal = ltp || 0;
+        const match = advancedRanges.find(r => ltpVal >= r.start_range && ltpVal <= r.end_range);
+        if (match) {
+            return {
+                price: String(match.jobbing_value),
+                type: match.jobbing_type
+            };
+        }
+        return {
+            price: jobbin_price,
+            type: jobbin_type
+        };
+    }, [ltp, advancedRanges, jobbin_price, jobbin_type]);
+
+    const isRangeMatched = useMemo(() => {
+        const ltpVal = ltp || 0;
+        return advancedRanges.some(r => ltpVal >= r.start_range && ltpVal <= r.end_range);
+    }, [ltp, advancedRanges]);
+
     const jobbinPct = useMemo(() => {
-        if (jobbin_type === 'points') return 0;
-        const v = parseFloat(String(jobbin_price).trim());
+        if (activeJobbing.type === 'points') return 0;
+        const v = parseFloat(String(activeJobbing.price).trim());
         return Number.isFinite(v) ? v / 100 : 0;
-    }, [jobbin_price, jobbin_type]);
+    }, [activeJobbing]);
 
     const jobbinPoints = useMemo(() => {
-        if (jobbin_type !== 'points') return 0;
-        const v = parseFloat(String(jobbin_price).trim());
+        if (activeJobbing.type !== 'points') return 0;
+        const v = parseFloat(String(activeJobbing.price).trim());
         return Number.isFinite(v) ? v : 0;
-    }, [jobbin_price, jobbin_type]);
+    }, [activeJobbing]);
 
     const { adjustedPricePerShare } = useMemo(() => {
         if (!ltp) return { adjustedPricePerShare: 0 };
         let pxRaw;
-        if (jobbin_type === 'points') {
+        if (activeJobbing.type === 'points') {
             pxRaw = actionTab === 'Buy' ? (ltp + jobbinPoints) : (ltp - jobbinPoints);
         } else {
             const perShareFactor = actionTab === 'Buy' ? (1 + jobbinPct) : (1 - jobbinPct);
             pxRaw = ltp * perShareFactor;
         }
         return { adjustedPricePerShare: Number(pxRaw.toFixed(4)) };
-    }, [ltp, actionTab, jobbinPct, jobbinPoints, jobbin_type]);
+    }, [ltp, actionTab, jobbinPct, jobbinPoints, activeJobbing.type]);
 
     const totalOrderValue = useMemo(() => {
         if (!adjustedPricePerShare || !qtyNum) return 0;
@@ -178,11 +220,19 @@ const OptionStrikeBottomWindow = ({
 
     // --- Name Construction ---
     const getInstrumentName = () => {
-        const symbol = underlyingStock?.underlying_symbol
+        // If we have an exact tradingSymbol passed from props (e.g. from OptionChain), use it!
+        if (tradingSymbol) return tradingSymbol.toUpperCase();
+
+        let symbol = underlyingStock?.underlying_symbol
             || underlyingStock?.symbol_name
             || underlyingStock?.name
             || underlyingStock?.symbol
             || "UNKNOWN";
+        
+        // CLEANUP: If symbol contains " FUT", " FUTURE", or specific dates, it's likely a future's full name.
+        // We only want the base part (e.g. NIFTY)
+        symbol = symbol.split(' ')[0]; // Take first word, e.g. "NIFTY" from "NIFTY 25 APR FUT"
+        symbol = symbol.replace(/FUT.*/i, '').replace(/FUTURE.*/i, ''); // Remove FUT/FUTURE if still there
 
         let expiryStr = "";
         if (expiry) {
@@ -197,7 +247,7 @@ const OptionStrikeBottomWindow = ({
         const typeStr = (optionType === 'CE' || optionType === 'CALL') ? 'CE' : 'PE';
         return `${symbol}${expiryStr}${strikePrice}${typeStr}`.toUpperCase();
     };
-    const instrumentName = getInstrumentName();
+    const instrumentName = formatTradingSymbol(getInstrumentName());
 
     const formatExpiryFull = (dateStr) => {
         if (!dateStr) return '';
@@ -281,31 +331,73 @@ const OptionStrikeBottomWindow = ({
 
             const activeContextString = localStorage.getItem('activeContext');
             const activeContext = activeContextString ? JSON.parse(activeContextString) : {};
-            const effectiveBrokerId = brokerId || activeContext.brokerId;
-            const effectiveCustomerId = customerId || activeContext.customerId;
+            const globalBrokerId = localStorage.getItem('associatedBrokerStringId');
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlCustomerId = urlParams.get('customerId');
+            const userString = localStorage.getItem('loggedInUser');
+            const userObject = userString ? JSON.parse(userString) : {};
+
+            const effectiveBrokerId = brokerId || activeContext.brokerId || globalBrokerId;
+            const effectiveCustomerId = customerId || activeContext.customerId || urlCustomerId || (userObject.role === 'customer' ? userObject.id : null);
 
             const side = actionTab === 'Buy' ? 'BUY' : 'SELL';
             const product = productType === 'Intraday' ? 'MIS' : 'NRML';
-            const finalPrice = adjustedPricePerShare || ltp;
+
+            // Dynamically calculate matching jobbing price & type for the fresh order price!
+            const orderMatch = advancedRanges.find(r => ltp >= r.start_range && ltp <= r.end_range);
+            const orderJobbingPrice = orderMatch ? String(orderMatch.jobbing_value) : jobbin_price;
+            const orderJobbingType = orderMatch ? orderMatch.jobbing_type : jobbin_type;
+            const orderJobbingPct = orderJobbingType === 'percentage' ? (parseFloat(orderJobbingPrice) || 0) / 100 : 0;
+            const orderJobbingPoints = orderJobbingType === 'points' ? (parseFloat(orderJobbingPrice) || 0) : 0;
+
+            let finalPrice;
+            if (orderJobbingType === 'points') {
+                finalPrice = Number((actionTab === 'Buy' ? (ltp + orderJobbingPoints) : (ltp - orderJobbingPoints)).toFixed(4));
+            } else {
+                const jobbinFactor = actionTab === 'Buy' ? (1 + orderJobbingPct) : (1 - orderJobbingPct);
+                finalPrice = Number((ltp * jobbinFactor).toFixed(4));
+            }
             const token = localStorage.getItem('token') || localStorage.getItem('authToken') || null;
+
+            // Normalize Segment for Options
+            const getNormalizedSegment = () => {
+                if (segment) return segment; // Use passed segment if available
+                
+                const baseSegment = underlyingStock?.segment || 'NFO-OPT';
+                // Always force OPT segment since this window is for options
+                return baseSegment.replace('-FUT', '-OPT');
+            };
+
+            // Construct a pseudo stock object for the option contract.
+            // Many order listing components fall back to meta.selectedStock.tradingSymbol for rendering.
+            const pseudoSelectedStock = {
+                ...underlyingStock,
+                tradingSymbol: instrumentName,
+                name: instrumentName,
+                segment: getNormalizedSegment(),
+                instrument_token: finalInstrumentToken,
+                instrument_type: optionType === 'CE' || optionType === 'CALL' ? 'CE' : 'PE',
+                strike: strikePrice,
+                expiry: expiry
+            };
 
             const payload = {
                 broker_id_str: effectiveBrokerId,
                 customer_id_str: effectiveCustomerId,
                 instrument_token: finalInstrumentToken,
                 symbol: instrumentName,
-                segment: underlyingStock?.segment || 'NFO-OPT',
+                segment: getNormalizedSegment(),
                 side,
                 product,
                 price: Number(finalPrice),
                 quantity: qtyNum,
                 lots: lotsNum,
                 lot_size: lotSize,
-                jobbin_price: (jobbin_price === '' || jobbin_price === undefined || jobbin_price === null) ? 0 : Number(jobbin_price),
-                jobbin_type: jobbin_type,
+                jobbin_price: (orderJobbingPrice === '' || orderJobbingPrice === undefined || orderJobbingPrice === null) ? 0 : Number(orderJobbingPrice),
+                jobbin_type: orderJobbingType,
                 came_From: 'Open',
                 expire: expiry || undefined,
-                meta: { from: 'ui_option_chain', underlying: underlyingStock?.name, expiry, strike: strikePrice, optionType, selectedStock: underlyingStock },
+                meta: { from: 'ui_option_chain', underlying: underlyingStock?.name, expiry, strike: strikePrice, optionType, selectedStock: pseudoSelectedStock },
                 placed_at: new Date()
             };
 
@@ -436,12 +528,15 @@ const OptionStrikeBottomWindow = ({
                         {/* MATCHED COMPACT JOBBING (Broker Only) */}
                         {userRole === 'broker' && (
                             <div className="mb-3 bg-[#1e222d] p-3.5 rounded-2xl border border-[#2a2e39]">
-                                <label className="text-[9px] font-black text-[#808a9d] uppercase mb-1 block">Jobbing ({jobbin_type === 'percentage' ? '%' : '₹'})</label>
+                                <label className="text-[9px] font-black text-[#808a9d] uppercase mb-1 block">
+                                    Jobbing ({activeJobbing.type === 'percentage' ? '%' : '₹'}) {isRangeMatched && <span className="text-[8px] text-indigo-400 font-bold ml-1.5 uppercase">(Range Active)</span>}
+                                </label>
                                 <input 
                                     type="number" 
-                                    value={jobbin_price} 
-                                    onChange={(e) => setJobbin_price(e.target.value)} 
-                                    className="bg-transparent text-center text-2xl font-black text-white w-full outline-none" 
+                                    value={activeJobbing.price} 
+                                    onChange={(e) => !isRangeMatched && setJobbin_price(e.target.value)} 
+                                    disabled={isRangeMatched}
+                                    className={`bg-transparent text-center text-2xl font-black w-full outline-none ${isRangeMatched ? 'text-indigo-400 opacity-90' : 'text-white'}`} 
                                 />
                             </div>
                         )}
@@ -466,13 +561,15 @@ const OptionStrikeBottomWindow = ({
 
                 {/* MATCHED MINI FOOTER */}
                 <div className="p-4 bg-[#1e222d] border-t border-[#2a2e39] flex gap-3">
-                    <button 
-                        onClick={handleConfirm} 
-                        disabled={submitting || !lotsNum} 
-                        className={`flex-[2] py-3.5 rounded-xl text-white font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 ${actionTab === 'Buy' ? 'bg-[#089981]' : 'bg-[#f23645]'} ${submitting || !lotsNum ? 'opacity-50' : ''}`}
-                    >
-                        {submitting ? '...' : actionTab}
-                    </button>
+                    <LockedButtonWrapper featureId={actionTab === 'Buy' ? 'buy' : 'sell'} className="flex-[2]">
+                        <button 
+                            onClick={handleConfirm} 
+                            disabled={submitting || !lotsNum} 
+                            className={`w-full py-3.5 rounded-xl text-white font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 ${actionTab === 'Buy' ? 'bg-[#089981]' : 'bg-[#f23645]'} ${submitting || !lotsNum ? 'opacity-50' : ''}`}
+                        >
+                            {submitting ? '...' : actionTab}
+                        </button>
+                    </LockedButtonWrapper>
                     <button 
                         onClick={onClose} 
                         className="flex-1 py-3.5 rounded-xl bg-[#2a2e39] text-[#808a9d] font-bold text-[10px] uppercase transition-colors hover:text-white"

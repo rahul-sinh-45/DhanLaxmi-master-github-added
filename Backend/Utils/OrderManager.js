@@ -1,5 +1,8 @@
 import Order from '../Model/OrdersModel.js';
 import Fund from '../Model/FundModel.js';
+import { rollbackOptionUsage } from './OptionLimitManager.js';
+import { rollbackMcxUsage } from './McxLimitManager.js';
+import { rollbackMcxOptionUsage } from './McxOptionLimitManager.js';
 
 // =========================================================
 // 1. GLOBAL MEMORY (RAM) - THE WATCHLIST
@@ -19,9 +22,9 @@ export const loadOpenOrders = async () => {
     try {
         console.log("🔄 [OrderManager] Loading active triggers...");
 
-        // LOGIC: Status 'CLOSED' nahi hona chahiye + SL ya Target set hona chahiye
+        // LOGIC: Status 'CLOSED' aur 'RESTRICTED' nahi hona chahiye + SL ya Target set hona chahiye
         const activeOrders = await Order.find({
-            order_status: { $ne: 'CLOSED' }, // Means: OPEN, HOLD, or null
+            order_status: { $nin: ['CLOSED', 'RESTRICTED'] }, // Means: OPEN, HOLD, or null
             $or: [
                 { stop_loss: { $exists: true, $ne: null, $gt: 0 } },
                 { target: { $exists: true, $ne: null, $gt: 0 } }
@@ -65,12 +68,16 @@ export const addToWatchlist = (order) => {
     // 3. Store only necessary data
     const triggerData = {
         orderId: String(order._id),
+        symbol: order.symbol,
+        segment: order.segment,
         side: order.side,          // 'BUY' or 'SELL'
         sl: sl,
         target: target,
         increase_price: Number(order.increase_price) || 0,
         jobbin_type: order.jobbin_type || 'percentage',
         jobbing_point: Number(order.jobbing_point) || 0,
+        jobbing_applied_ltp: Number(order.jobbing_applied_ltp) || 0,
+        customer_exit_price: Number(order.customer_exit_price) || 0,
         status: order.order_status,
         broker_id_str: order.broker_id_str,
         customer_id_str: order.customer_id_str,
@@ -105,8 +112,8 @@ export const updateTriggerInWatchlist = (order) => {
         }
     }
 
-    // Step 2: Agar abhi bhi CLOSED nahi hai, to wapas add karo
-    if (order.order_status !== 'CLOSED') {
+    // Step 2: Agar abhi bhi CLOSED aur RESTRICTED nahi hai, to wapas add karo
+    if (order.order_status !== 'CLOSED' && order.order_status !== 'RESTRICTED') {
         addToWatchlist(order);
     }
 };
@@ -135,10 +142,17 @@ const executeExit = async (orderData, exitPrice, reason) => {
         // B. Update Order Status in Database
         let finalExitPrice = Number(exitPrice);
 
-        // Apply Manual Jobbing Point (₹ flat amount)
-        const jpValue = Number(orderData.jobbing_point) || 0;
-        if (jpValue > 0 && finalExitPrice > 0) {
-            finalExitPrice = orderData.side === 'BUY' ? finalExitPrice - jpValue : finalExitPrice + jpValue;
+        const custExitPrice = Number(orderData.customer_exit_price) || 0;
+        if (custExitPrice > 0) {
+            finalExitPrice = custExitPrice;
+        } else {
+            // Apply Manual Jobbing Point (₹ flat amount)
+            const refLtp = Number(orderData.jobbing_applied_ltp || 0) || finalExitPrice;
+            finalExitPrice = refLtp;
+            const jpValue = Number(orderData.jobbing_point) || 0;
+            if (jpValue > 0 && finalExitPrice > 0) {
+                finalExitPrice = orderData.side === 'BUY' ? finalExitPrice - jpValue : finalExitPrice + jpValue;
+            }
         }
         const closedLtp = finalExitPrice > 0 ? Number(finalExitPrice.toFixed(4)) : 0;
 
@@ -155,25 +169,45 @@ const executeExit = async (orderData, exitPrice, reason) => {
         // C. ⚡ Release Fund Atomically
         const { broker_id_str, customer_id_str, product, margin_blocked, price, quantity, side } = orderData;
         const marginToRelease = Number(margin_blocked || (price * quantity) || 0);
-
+        
         let pnl = 0;
         if (closedLtp > 0) {
             pnl = side === 'BUY' ? (closedLtp - price) * quantity : (price - closedLtp) * quantity;
         }
 
-        if (marginToRelease > 0 || pnl !== 0) {
+        if (marginToRelease > 0) {
             const isIntraday = String(product).trim().toUpperCase() === 'MIS';
-            const incQuery = {};
-            if (marginToRelease > 0) {
-                if (isIntraday) incQuery["intraday.used_limit"] = -marginToRelease;
-                else incQuery["overnight.available_limit"] = marginToRelease;
-            }
-            if (pnl !== 0) incQuery["net_pnl"] = pnl;
+            const fund = await Fund.findOne({ broker_id_str, customer_id_str });
+            if (fund) {
+                if (isIntraday) {
+                    fund.intraday.used_limit = Math.max(0, (fund.intraday.used_limit || 0) - marginToRelease);
+                    fund.intraday.free_limit = Math.max(0, (fund.intraday.available_limit || 0) - fund.intraday.used_limit);
+                } else {
+                    fund.overnight.available_limit = (fund.overnight.available_limit || 0) + marginToRelease;
+                    fund.overnight.free_limit = Math.max(0, (fund.overnight.available_limit || 0) - (fund.overnight.used_limit || 0));
+                }
 
-            await Fund.updateOne(
-                { broker_id_str, customer_id_str },
-                { $inc: incQuery }
-            );
+                // Rollback Option & MCX daily limits
+                const symUpper = String(orderData.symbol || "").toUpperCase();
+                const isOption = (symUpper.endsWith("CE") || symUpper.endsWith("PE") || symUpper.endsWith("CALL") || symUpper.endsWith("PUT"));
+                const isMcx = String(orderData.segment || "").trim().toUpperCase().includes("MCX");
+                const isMcxOption = isOption && isMcx;
+                const isNormalOption = isOption && !isMcx;
+                const productNorm = String(product).trim().toUpperCase();
+
+                if (isMcxOption) {
+                    rollbackMcxOptionUsage(fund, productNorm, marginToRelease);
+                } else if (isNormalOption) {
+                    rollbackOptionUsage(fund, productNorm, marginToRelease);
+                }
+
+                if (isMcx) {
+                    rollbackMcxUsage(fund, productNorm, marginToRelease);
+                }
+
+                await fund.save();
+                console.log(`[OrderManager] Fund released for exit: ${marginToRelease}`);
+            }
         }
 
         console.log(`✅ [OrderManager] Order ${orderId} Closed Successfully.`);

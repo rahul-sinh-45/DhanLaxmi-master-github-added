@@ -24,9 +24,16 @@ import kiteAuthRoute from "./Routes/kiteAuthRoute.js"
 import superBrokerRoute from "./Routes/SuperBrokerRoute.js"
 import transactionRoute from "./Routes/transactionRoute.js"
 import permissionRoute from "./Routes/permissionRoute.js"
+import advancedJobbingRoute from "./Routes/advancedJobbingRoute.js"
 
 export function createApp() {
   const app = express();
+
+  // Request logger
+  app.use((req, res, next) => {
+    console.log(`[Request] ${req.method} ${req.url}`);
+    next();
+  });
 
   // ----- CORS SETUP (UPDATED) -----
   // We explicitly define the allowed public and local origins here
@@ -38,11 +45,15 @@ export function createApp() {
     "swasthikabrokerage.in",
     "https://swasthikabrokerage.in",
     "https://devaki-new-backend.onrender.com",
+    "https://shivalik-latest-1.onrender.com",
     "https://dhanlaxmi-latest-1.onrender.com",
     "http://147.93.106.182:5000",
     "http://147.93.106.182:3000",
     "http://localhost:5000",
     "http://localhost:5173",
+    "https://shivalikbrokerage.in",
+    "https://www.shivalikbrokerage.in",
+    "shivalikbrokerage.in",
     "https://dhanlaxmibrokerage.in",
     "https://www.dhanlaxmibrokerage.in",
     "dhanlaxmibrokerage.in",
@@ -122,6 +133,7 @@ export function createApp() {
   app.use("/api/superbroker", superBrokerRoute); // New Super Broker Recycle Bin routes
   app.use("/api/transactions", transactionRoute);
   app.use("/api/permissions", permissionRoute);
+  app.use("/api", advancedJobbingRoute);
 
   // Version endpoint for cache busting - INCREMENT VERSION ON EVERY DEPLOYMENT
   const APP_VERSION = '1.8.8';

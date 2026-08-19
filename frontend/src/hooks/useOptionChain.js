@@ -4,6 +4,17 @@ import { useMarketData } from '../contexts/MarketDataContext';
 
 const apiBase = import.meta.env.VITE_REACT_APP_API_URL || 'http://localhost:8080';
 
+const UNDERLYING_MAPPING = {
+  'NIFTY 50': 'NIFTY',
+  'NIFTY BANK': 'BANKNIFTY',
+  'NIFTY FIN SERVICE': 'FINNIFTY',
+  'NIFTY MID SELECT': 'MIDCPNIFTY',
+  'NIFTY MIDCAP 100': 'MIDCPNIFTY',
+  'SENSEX': 'SENSEX',
+  'BANKEX': 'BANKEX',
+  'BSE INDEX BANKEX': 'BANKEX'
+};
+
 /**
  * Custom hook to fetch and manage option chain data with live WebSocket updates
  * @param {Object} params - { name, segment, expiry }
@@ -14,6 +25,7 @@ export function useOptionChain({ name, segment, expiry }) {
   const [spotPrice, setSpotPrice] = useState(null);
   const [spotInstrumentInfo, setSpotInstrumentInfo] = useState(null);
   const [expiries, setExpiries] = useState([]);
+  const [activeSegment, setActiveSegment] = useState(null); // The actual OPT segment from backend
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -35,7 +47,8 @@ export function useOptionChain({ name, segment, expiry }) {
       return;
     }
 
-    const params = new URLSearchParams({ name });
+    const normalizedName = UNDERLYING_MAPPING[name] || name;
+    const params = new URLSearchParams({ name: normalizedName });
     if (segment) params.append('segment', segment);
     if (expiry) params.append('expiry', expiry);
 
@@ -75,6 +88,7 @@ export function useOptionChain({ name, segment, expiry }) {
 
       setChainData(result.data.chain);
       setSpotInstrumentInfo(result.data.spotInstrumentInfo);
+      setActiveSegment(result.data.segment); // Set the normalized segment
       setSpotPrice(null); // Reset spot price until we get WebSocket update
 
       lastFetchParamsRef.current = paramsKey;
@@ -95,7 +109,8 @@ export function useOptionChain({ name, segment, expiry }) {
   const fetchExpiries = useCallback(async () => {
     if (!name) return;
 
-    const params = new URLSearchParams({ name });
+    const normalizedName = UNDERLYING_MAPPING[name] || name;
+    const params = new URLSearchParams({ name: normalizedName });
     if (segment) params.append('segment', segment);
 
     console.log('[useOptionChain] Fetching expiries for:', name);
@@ -178,10 +193,10 @@ export function useOptionChain({ name, segment, expiry }) {
     // Store for cleanup
     subscribedTokensRef.current = subscriptionList;
 
-    console.log(`[useOptionChain] Subscribing to ${subscriptionList.length} option contracts (ticker mode)`);
+    console.log(`[useOptionChain] Subscribing to ${subscriptionList.length} option contracts (quote mode)`);
 
-    // Subscribe with 'ticker' packet type for LTP-only updates
-    subscribe(subscriptionList, 'ticker');
+    // Subscribe with 'quote' packet type for LTP and volume updates
+    subscribe(subscriptionList, 'quote');
 
   }, [isConnected, subscribe]);
 
@@ -193,7 +208,7 @@ export function useOptionChain({ name, segment, expiry }) {
 
     console.log('[useOptionChain] Unsubscribing from', subscribedTokensRef.current.length, 'option contracts');
 
-    unsubscribe(subscribedTokensRef.current, 'ticker');
+    unsubscribe(subscribedTokensRef.current, 'quote');
 
     // Clear tracking
     subscribedTokensRef.current = [];
@@ -280,7 +295,7 @@ export function useOptionChain({ name, segment, expiry }) {
       let hasUpdates = false;
       const currentChain = chainDataRef.current;
 
-      const pendingUpdates = new Map(); // index -> { call: ltp, put: ltp }
+      const pendingUpdates = new Map(); // index -> { callLtp, callVolume, putLtp, putVolume }
 
       tokenMapRef.current.forEach((position, token) => {
         // Ticks are keyed by instrument_token directly (Kite format)
@@ -291,13 +306,21 @@ export function useOptionChain({ name, segment, expiry }) {
           const row = currentChain[index];
           if (!row) return;
 
-          const currentLtp = type === 'call' ? row.call?.ltp : row.put?.ltp;
+          const optionData = type === 'call' ? row.call : row.put;
+          const currentLtp = optionData?.ltp;
+          const currentVolume = optionData?.volume || 0;
+          const tickVolume = tick.volume || 0;
 
-          if (currentLtp !== tick.ltp) {
+          if (currentLtp !== tick.ltp || currentVolume !== tickVolume) {
             // Found a change!
             const entry = pendingUpdates.get(index) || {};
-            if (type === 'call') entry.callLtp = tick.ltp;
-            if (type === 'put') entry.putLtp = tick.ltp;
+            if (type === 'call') {
+              entry.callLtp = tick.ltp;
+              entry.callVolume = tickVolume;
+            } else {
+              entry.putLtp = tick.ltp;
+              entry.putVolume = tickVolume;
+            }
             pendingUpdates.set(index, entry);
           }
         }
@@ -311,10 +334,18 @@ export function useOptionChain({ name, segment, expiry }) {
           const newRow = { ...row };
 
           if (updates.callLtp !== undefined && newRow.call) {
-            newRow.call = { ...newRow.call, ltp: updates.callLtp };
+            newRow.call = { 
+              ...newRow.call, 
+              ltp: updates.callLtp,
+              volume: updates.callVolume !== undefined ? updates.callVolume : newRow.call.volume
+            };
           }
           if (updates.putLtp !== undefined && newRow.put) {
-            newRow.put = { ...newRow.put, ltp: updates.putLtp };
+            newRow.put = { 
+              ...newRow.put, 
+              ltp: updates.putLtp,
+              volume: updates.putVolume !== undefined ? updates.putVolume : newRow.put.volume
+            };
           }
           updatedChain[index] = newRow;
         }
@@ -384,6 +415,7 @@ export function useOptionChain({ name, segment, expiry }) {
     expiries,
     loading,
     error,
+    segment: activeSegment,
     refetch: fetchOptionChain,
   };
 }

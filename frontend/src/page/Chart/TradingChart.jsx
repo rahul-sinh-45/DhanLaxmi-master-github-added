@@ -1,6 +1,6 @@
 // TradingChart.jsx - Professional trading chart using TradingView Lightweight Charts
 import React, { useEffect, useRef, useState } from 'react';
-import { createChart, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries } from 'lightweight-charts';
 import { useMarketData } from '../../contexts/MarketDataContext.jsx';
 import { useTheme } from '../../contexts/ThemeContext.jsx';
 
@@ -24,6 +24,7 @@ function TradingChart({
   candles = [],
   symbol,
   interval,
+  chartType = 'candle',
   isLiveEnabled = false,
   loading = false
 }) {
@@ -38,19 +39,19 @@ function TradingChart({
   const [lastCandleTime, setLastCandleTime] = useState(null);
   const lastUpdateRef = useRef(0); // Throttle updates
 
-  // Theme-aware chart colors
+  // Theme-aware chart colors using transparency to blend with app dark/light mode seamlessly
   const chartColors = isDark ? {
-    background: '#1A1F30',
-    textColor: '#cccccc',
-    gridColor: '#2B2B43',
-    borderColor: '#2B2B43',
+    background: 'transparent', 
+    textColor: '#d1d4dc', 
+    gridColor: 'rgba(255, 255, 255, 0.05)', 
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     crosshairColor: '#758696',
     labelBackground: '#4682B4',
   } : {
-    background: '#ffffff',
-    textColor: '#333333',
-    gridColor: '#e0e0e0',
-    borderColor: '#d0d0d0',
+    background: 'transparent',
+    textColor: '#191919',
+    gridColor: 'rgba(0, 0, 0, 0.05)', 
+    borderColor: 'rgba(0, 0, 0, 0.1)',
     crosshairColor: '#9598a1',
     labelBackground: '#4682B4',
   };
@@ -91,7 +92,7 @@ function TradingChart({
           borderColor: chartColors.borderColor,
           scaleMargins: {
             top: 0.1,
-            bottom: 0.2,
+            bottom: 0.2, // Leave room for volume
           },
         },
         timeScale: {
@@ -117,20 +118,33 @@ function TradingChart({
 
       console.log('[TradingChart] Chart created successfully');
 
-      // Add candlestick series - v5.x uses addSeries with series type definition
-      const candleSeries = chart.addSeries(CandlestickSeries, {
-        upColor: '#00B746',
-        downColor: '#EF403C',
-        borderDownColor: '#EF403C',
-        borderUpColor: '#00B746',
-        wickDownColor: '#EF403C',
-        wickUpColor: '#00B746',
-        priceFormat: {
-          type: 'price',
-          precision: 2,
-          minMove: 0.01,
-        },
-      });
+      // Add candlestick or line series dynamically - Using premium colors
+      let candleSeries;
+      if (chartType === 'line') {
+        candleSeries = chart.addSeries(LineSeries, {
+          color: '#2962ff',
+          lineWidth: 2,
+          priceFormat: {
+            type: 'price',
+            precision: 2,
+            minMove: 0.01,
+          },
+        });
+      } else {
+        candleSeries = chart.addSeries(CandlestickSeries, {
+          upColor: '#089981',
+          downColor: '#f23645',
+          borderDownColor: '#f23645',
+          borderUpColor: '#089981',
+          wickDownColor: '#f23645',
+          wickUpColor: '#089981',
+          priceFormat: {
+            type: 'price',
+            precision: 2,
+            minMove: 0.01,
+          },
+        });
+      }
 
       // Add volume series (histogram)
       const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -184,7 +198,7 @@ function TradingChart({
         chartRef.current = null;
       }
     };
-  }, [isDark]); // Re-create chart when theme changes
+  }, [isDark, chartType]); // Re-create chart when theme or chartType changes
 
   // Load historical candles
   useEffect(() => {
@@ -193,20 +207,36 @@ function TradingChart({
     try {
       const transformedCandles = transformCandles(candles);
 
-      // Set candle data
-      candleSeriesRef.current.setData(transformedCandles);
+      // Set candle data based on chartType
+      if (chartType === 'line') {
+        const lineData = transformedCandles.map(candle => ({
+          time: candle.time,
+          value: candle.close
+        }));
+        candleSeriesRef.current.setData(lineData);
+      } else {
+        candleSeriesRef.current.setData(transformedCandles);
+      }
 
       // Set volume data with colors
       const volumeData = transformedCandles.map(candle => ({
         time: candle.time,
         value: candle.volume,
-        color: candle.close >= candle.open ? '#00B74680' : '#EF403C80'
+        color: candle.close >= candle.open ? '#08998180' : '#f2364580'
       }));
       volumeSeriesRef.current.setData(volumeData);
 
-      // Fit content to view
+      // Zoom elegantly to the recent candles
       if (chartRef.current) {
-        chartRef.current.timeScale().fitContent();
+        const totalCandles = transformedCandles.length;
+        if (totalCandles > 30) {
+          chartRef.current.timeScale().setVisibleLogicalRange({
+            from: totalCandles - 30,
+            to: totalCandles + 2 // Extra space on the right
+          });
+        } else {
+          chartRef.current.timeScale().fitContent();
+        }
       }
 
       // Store last candle time for live updates
@@ -217,83 +247,7 @@ function TradingChart({
     } catch (error) {
       console.error('[TradingChart] Error loading candles:', error);
     }
-  }, [candles]);
-
-  // Process live ticks (THROTTLED, direct chart updates)
-  useEffect(() => {
-    if (!isLiveEnabled || !isConnected || !candleSeriesRef.current || !volumeSeriesRef.current) return;
-    if (!symbol || !lastCandleTime) return;
-
-    const [segment, securityId] = symbol.split('|');
-    if (!segment || !securityId) return;
-
-    // Map segment to numeric format
-    const segmentMap = { "IDX_I": 0, "NSE_EQ": 1, "NSE_FNO": 2, "NSE_CURRENCY": 3, "BSE_EQ": 4, "BSE_CURRENCY": 7, "MCX_COMM": 5, "NSE_INDEX": 0, "BSE_INDEX": 0, "BSE_FNO": 8 };
-
-    const numericSegment = segmentMap[segment];
-    const tickKey = `${numericSegment}-${securityId}`;
-
-    // Poll the Ref directly
-    const tick = ticksRef.current?.get(tickKey);
-
-    if (!tick || !tick.ltp) return;
-
-    // THROTTLE: Max 1 update per second
-    const now = Date.now();
-    if (now - lastUpdateRef.current < 1000) return;
-    lastUpdateRef.current = now;
-
-    try {
-      const intervalMs = Number(interval) * 60 * 1000;
-      const currentTime = Math.floor(Date.now() / 1000);
-      const timeSinceLastCandle = (currentTime - lastCandleTime) * 1000; // Convert back to ms
-
-      if (timeSinceLastCandle < intervalMs) {
-        // Update existing candle using chart's update method
-        // Lightweight Charts will handle the merging automatically
-        candleSeriesRef.current.update({
-          time: lastCandleTime,
-          open: tick.open || tick.ltp,
-          high: tick.high || tick.ltp,
-          low: tick.low || tick.ltp,
-          close: tick.ltp
-        });
-
-        // Update volume
-        if (tick.volume) {
-          volumeSeriesRef.current.update({
-            time: lastCandleTime,
-            value: tick.volume,
-            color: tick.ltp >= (tick.open || tick.ltp) ? '#00B74680' : '#EF403C80'
-          });
-        }
-      } else if (timeSinceLastCandle >= intervalMs && timeSinceLastCandle < intervalMs * 2) {
-        // Create new candle
-        const newCandleTime = lastCandleTime + Math.floor(intervalMs / 1000);
-
-        candleSeriesRef.current.update({
-          time: newCandleTime,
-          open: tick.ltp,
-          high: tick.ltp,
-          low: tick.ltp,
-          close: tick.ltp
-        });
-
-        volumeSeriesRef.current.update({
-          time: newCandleTime,
-          value: tick.volume || 0,
-          color: '#00B74680'
-        });
-
-        setLastCandleTime(newCandleTime);
-        console.log('[TradingChart] New candle created at', new Date(newCandleTime * 1000));
-      }
-    } catch (error) {
-      console.error('[TradingChart] Error processing live tick:', error);
-    }
-  }, [symbol, interval, isLiveEnabled, isConnected, lastCandleTime]); // Remove 'ticks' dependency, now we poll or rely on parent re-renders.
-  // Wait, if we remove 'ticks' dependency, this effect WON'T RUN when new ticks arrive.
-  // We need a loop here too!
+  }, [candles, chartType]);
 
   // REPLACEMENT: Polling Loop for Chart Updates
   useEffect(() => {
@@ -309,30 +263,6 @@ function TradingChart({
     const numericSegment = segmentMap[segment];
     const tickKey = `${numericSegment}-${securityId}`;
 
-    const updateChartLoop = () => {
-      if (!ticksRef.current) return;
-      const tick = ticksRef.current.get(tickKey);
-
-      if (!tick || !tick.ltp) return;
-
-      // THROTTLE: Max 1 update per second
-      const now = Date.now();
-      if (now - lastUpdateRef.current < 1000) return;
-      lastUpdateRef.current = now;
-
-      if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
-
-      try {
-        // ... (Same update logic)
-        // We need to access lastCandleTime. State in strict effect is stale?
-        // Yes, lastCandleTime would be stale in a setInterval/RAF if not using ref.
-        // But we can check chart's last data? 
-        // Or just use a Ref for lastCandleTime too.
-        // Let's use the functional update pattern or Ref.
-      } catch (e) { }
-    }
-
-    // Actually, for charts, a simple setInterval is often cleaner than RAF if we just want 1Hz updates
     const intervalId = setInterval(() => {
       const tick = ticksRef.current?.get(tickKey);
       if (tick && tick.ltp) {
@@ -345,34 +275,48 @@ function TradingChart({
 
           // Update Logic
           if (timeSince < intervalMs) {
-            candleSeriesRef.current.update({
-              time: prevTime,
-              open: tick.open || tick.ltp,
-              high: tick.high || tick.ltp,
-              low: tick.low || tick.ltp,
-              close: tick.ltp
-            });
+            if (chartType === 'line') {
+              candleSeriesRef.current.update({
+                time: prevTime,
+                value: tick.ltp
+              });
+            } else {
+              candleSeriesRef.current.update({
+                time: prevTime,
+                open: tick.open || tick.ltp,
+                high: tick.high || tick.ltp,
+                low: tick.low || tick.ltp,
+                close: tick.ltp
+              });
+            }
             if (tick.volume) {
               volumeSeriesRef.current.update({
                 time: prevTime,
                 value: tick.volume,
-                color: tick.ltp >= (tick.open || tick.ltp) ? '#00B74680' : '#EF403C80'
+                color: tick.ltp >= (tick.open || tick.ltp) ? '#08998180' : '#f2364580'
               });
             }
             return prevTime; // Time hasn't changed
           } else if (timeSince >= intervalMs && timeSince < intervalMs * 2) {
             const newTime = prevTime + Math.floor(intervalMs / 1000);
-            candleSeriesRef.current.update({
-              time: newTime,
-              open: tick.ltp,
-              high: tick.ltp,
-              low: tick.ltp,
-              close: tick.ltp
-            });
+            if (chartType === 'line') {
+              candleSeriesRef.current.update({
+                time: newTime,
+                value: tick.ltp
+              });
+            } else {
+              candleSeriesRef.current.update({
+                time: newTime,
+                open: tick.ltp,
+                high: tick.ltp,
+                low: tick.ltp,
+                close: tick.ltp
+              });
+            }
             volumeSeriesRef.current.update({
               time: newTime,
               value: tick.volume || 0,
-              color: '#00B74680'
+              color: '#08998180'
             });
             return newTime; // New candle time
           }
@@ -382,14 +326,14 @@ function TradingChart({
     }, 1000); // 1 Second throttle
 
     return () => clearInterval(intervalId);
-  }, [symbol, isConnected, isLiveEnabled, interval]);
+  }, [symbol, isConnected, isLiveEnabled, interval, chartType]);
 
   if (loading) {
     return (
       <div
         ref={chartContainerRef}
-        className="relative w-full h-full flex items-center justify-center bg-[var(--bg-card)] rounded-lg"
-        style={{ minHeight: '400px' }}
+        className="absolute inset-0 w-full h-full flex items-center justify-center bg-[var(--bg-card)] rounded-lg"
+        style={{ minHeight: '300px' }}
       >
         <div className="flex flex-col items-center gap-2">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
@@ -402,9 +346,9 @@ function TradingChart({
   return (
     <div
       ref={chartContainerRef}
-      className="relative w-full h-full bg-[var(--bg-card)] rounded-lg"
+      className="absolute inset-0 w-full h-full bg-[var(--bg-card)] rounded-lg"
       style={{
-        minHeight: '400px'
+        minHeight: '300px'
       }}
     />
   );

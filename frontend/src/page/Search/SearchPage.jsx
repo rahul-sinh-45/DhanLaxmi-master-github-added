@@ -46,6 +46,12 @@ function SearchPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [activeFilter, setActiveFilter] = useState("All");
 
+  // Filter States for Search Results
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [expiryFilter, setExpiryFilter] = useState("");
+  const [strikeFilter, setStrikeFilter] = useState("");
+  const [optionTypeFilter, setOptionTypeFilter] = useState("");
+
   const navigate = useNavigate();
 
   // *** Notification State ***
@@ -438,8 +444,56 @@ function SearchPage() {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <SearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
+        <div className="flex-1 max-w-[calc(100%-100px)]">
+          <SearchBar searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
+        </div>
+        <button 
+          onClick={() => setIsFilterOpen(!isFilterOpen)}
+          title="Filter Options (Expiry, Strike, Type)"
+          className={`p-2 rounded-lg transition-colors border flex items-center justify-center flex-shrink-0 ${isFilterOpen || expiryFilter || strikeFilter || optionTypeFilter ? 'bg-blue-600/10 border-blue-500 text-blue-500' : 'bg-[var(--bg-secondary)] border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'}`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        </button>
       </div>
+
+      {isFilterOpen && (
+        <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-lg p-3 mb-3 text-sm z-10 transition-all flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-xs text-[var(--text-muted)] uppercase tracking-wider">Advanced Options Filter</span>
+            <button onClick={() => { setExpiryFilter(''); setStrikeFilter(''); setOptionTypeFilter(''); }} className="text-xs text-blue-500 hover:text-blue-400 font-medium">Clear All</button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <div className="flex-1 min-w-[110px] flex flex-col gap-1">
+              <label className="text-[10px] text-[var(--text-secondary)] font-medium">EXPIRY</label>
+              <select className="bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-color)] rounded p-1.5 w-full text-xs outline-none focus:border-blue-500 cursor-pointer" value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
+                <option value="">All Dates</option>
+                {Array.from(new Set((searchResults || []).filter(s => s.expiry).map(s => String(s.expiry)))).sort().map(exp => (
+                  <option key={exp} value={exp}>
+                    {new Date(exp).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1 min-w-[110px] flex flex-col gap-1">
+              <label className="text-[10px] text-[var(--text-secondary)] font-medium">STRIKE PRICE</label>
+              <select className="bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-color)] rounded p-1.5 w-full text-xs outline-none focus:border-blue-500 cursor-pointer" value={strikeFilter} onChange={(e) => setStrikeFilter(e.target.value)}>
+                <option value="">All Strikes</option>
+                {Array.from(new Set((searchResults || []).filter(s => s.strike).map(s => Number(s.strike)))).sort((a,b) => a - b).map(strike => (
+                  <option key={strike} value={String(strike)}>{strike}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex-1 min-w-[110px] flex flex-col gap-1">
+              <label className="text-[10px] text-[var(--text-secondary)] font-medium">TYPE (CE/PE)</label>
+              <select className="bg-[var(--bg-primary)] text-[var(--text-primary)] border border-[var(--border-color)] rounded p-1.5 w-full text-xs outline-none focus:border-blue-500 cursor-pointer" value={optionTypeFilter} onChange={(e) => setOptionTypeFilter(e.target.value)}>
+                <option value="">All Types (CE & PE)</option>
+                <option value="CE">Call (CE)</option>
+                <option value="PE">Put (PE)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-3 overflow-x-auto pb-2 mb-2 customscrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
          <style>{`.customscrollbar::-webkit-scrollbar { display: none; }`}</style>
@@ -501,6 +555,13 @@ function SearchPage() {
               if (activeFilter === 'Cash' && stock.instrument_type !== 'EQ' && !['NSE', 'BSE'].includes(stock.segment)) return;
               if (activeFilter === 'F&O' && !['FUT', 'CE', 'PE'].includes(stock.instrument_type)) return;
               if (activeFilter === 'MF' && stock.segment !== 'MF') return;
+            }
+
+            // Advanced F&O filters
+            if (activeFilter === 'All' || activeFilter === 'F&O') {
+              if (expiryFilter && stock.expiry && String(stock.expiry) !== expiryFilter) return;
+              if (strikeFilter && stock.strike && String(stock.strike) !== strikeFilter) return;
+              if (optionTypeFilter && stock.instrument_type !== optionTypeFilter) return;
             }
 
             const type = stock.instrument_type;
