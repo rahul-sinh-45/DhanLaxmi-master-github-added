@@ -62,7 +62,7 @@ const OptionChainFullscreen = ({ selectedStock, sheetData, onClose, brokerId, cu
         segment: chainSegment,
         refetch
     } = useOptionChain({
-        name: selectedStock?.tradingSymbol || selectedStock?.name,
+        name: selectedStock?.name || selectedStock?.tradingSymbol,
         segment: selectedStock?.segment,
         expiry: selectedExpiry
     });
