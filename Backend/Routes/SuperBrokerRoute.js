@@ -4,7 +4,8 @@ import {
     getDeletedBrokers, 
     restoreBroker, 
     permanentDeleteBroker,
-    toggleBanBroker
+    toggleBanBroker,
+    toggleCustomerCreation
 } from '../Controllers/SuperBrocker.js';
 import { protect, adminOnly } from '../Middleware/authMiddleware.js';
 
@@ -27,5 +28,8 @@ router.delete('/permanent-delete/:id', permanentDeleteBroker);
 
 // Toggle ban status for a broker
 router.post('/toggle-ban-broker/:id', toggleBanBroker);
+
+// Toggle customer creation permission for a broker
+router.post('/toggle-customer-creation/:id', toggleCustomerCreation);
 
 export default router;

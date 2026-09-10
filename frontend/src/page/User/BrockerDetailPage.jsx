@@ -241,8 +241,13 @@ const BrokerDetailsPage = () => {
 
   const handleToggleBanBroker = async (broker) => {
     const url = import.meta.env.VITE_REACT_APP_API_URL || '';
+    const token = localStorage.getItem('authToken');
     try {
-      const response = await axios.post(`${url}/api/superbroker/toggle-ban-broker/${broker.id}`);
+      const response = await axios.post(
+        `${url}/api/superbroker/toggle-ban-broker/${broker.id}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       if (response.data.success) {
         setBrokers(prev => prev.map(b => {
           if (b.id === broker.id) {
@@ -255,7 +260,32 @@ const BrokerDetailsPage = () => {
       }
     } catch (error) {
       console.error('Toggle ban error:', error);
-      alert('Error updating ban status.');
+      alert(error.response?.data?.message || 'Error updating ban status.');
+    }
+  };
+
+  const handleToggleCustomerCreation = async (broker) => {
+    const url = import.meta.env.VITE_REACT_APP_API_URL || '';
+    const token = localStorage.getItem('authToken');
+    try {
+      const response = await axios.post(
+        `${url}/api/superbroker/toggle-customer-creation/${broker.id}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (response.data.success) {
+        setBrokers(prev => prev.map(b => {
+          if (b.id === broker.id) {
+            return { ...b, can_create_customer: response.data.can_create_customer };
+          }
+          return b;
+        }));
+      } else {
+        alert(response.data.message || 'Failed to update customer creation permission.');
+      }
+    } catch (error) {
+      console.error('Toggle customer creation error:', error);
+      alert(error.response?.data?.message || 'Error updating customer creation permission.');
     }
   };
 
@@ -349,6 +379,17 @@ const BrokerDetailsPage = () => {
                 className={`py-1 px-4 rounded-md text-sm transition font-semibold text-white ${broker.status === 'Banned' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-500/10' : 'bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-500/10'}`}
               >
                 {broker.status === 'Banned' ? 'Unban' : 'Ban'}
+              </button>
+              <button
+                onClick={() => handleToggleCustomerCreation(broker)}
+                className={`py-1 px-4 rounded-md text-sm transition font-semibold text-white ${
+                  broker.can_create_customer === false
+                    ? 'bg-rose-600 hover:bg-rose-700 shadow-md shadow-rose-500/10'
+                    : 'bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-500/10'
+                }`}
+                title={broker.can_create_customer === false ? "Click to ALLOW customer creation" : "Click to BLOCK customer creation"}
+              >
+                {broker.can_create_customer === false ? 'Block Cust Add: ON' : 'Block Cust Add: OFF'}
               </button>
               <button
                 onClick={() => setBrokerToDelete(broker)}

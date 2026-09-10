@@ -52,6 +52,10 @@ const BrokerSchema = new Schema({
     is_banned: {
         type: Boolean,
         default: false
+    },
+    can_create_customer: {
+        type: Boolean,
+        default: true
     }
 });
 

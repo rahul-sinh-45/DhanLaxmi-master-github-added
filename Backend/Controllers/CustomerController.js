@@ -29,6 +29,16 @@ const addCustomer = asyncHandler(async (req, res) => {
     return;
   }
 
+  // Check if broker is allowed to create customers by Super Broker
+  const brokerObj = await BrokerModel.findById(brokerIdFromToken);
+  if (brokerObj && brokerObj.can_create_customer === false) {
+    res.status(403).json({ 
+      success: false, 
+      message: 'Customer creation has been disabled for your broker account by Super Broker.' 
+    });
+    return;
+  }
+
   // Create New Customer - Password stored as plain text
   const newCustomer = await CustomerModel.create({
     name,

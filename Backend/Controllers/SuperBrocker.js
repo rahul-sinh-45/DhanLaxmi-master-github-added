@@ -24,6 +24,7 @@ const getBrokers = asyncHandler(async (req, res) => {
         password: broker.password,
         joining_date: broker.createdAt ? broker.createdAt.toISOString().split('T')[0] : 'N/A',
         status: broker.is_banned ? 'Banned' : 'Active',
+        can_create_customer: broker.can_create_customer !== false,
     }));
 
     console.log(formattedBrokers)
@@ -432,4 +433,26 @@ const toggleBanBroker = asyncHandler(async (req, res) => {
     });
 });
 
-export { addBroker, getBrokers, deleteBroker, getDeletedBrokers, restoreBroker, permanentDeleteBroker, toggleBanBroker };
+// @desc    Toggle Customer Creation capability for a Broker
+// @route   POST /api/superbroker/toggle-customer-creation/:id
+const toggleCustomerCreation = asyncHandler(async (req, res) => {
+    const brokerLoginId = req.params.id;
+
+    let broker = await BrokerModel.findOne({ login_id: brokerLoginId });
+    if (!broker) {
+        return res.status(404).json({ success: false, message: 'Broker not found.' });
+    }
+
+    // Toggle property (default true if undefined)
+    broker.can_create_customer = broker.can_create_customer === false ? true : false;
+    await broker.save();
+
+    res.status(200).json({
+        success: true,
+        message: `Customer creation permission has been ${broker.can_create_customer ? 'enabled' : 'disabled'} for broker.`,
+        can_create_customer: broker.can_create_customer
+    });
+});
+
+export { addBroker, getBrokers, deleteBroker, getDeletedBrokers, restoreBroker, permanentDeleteBroker, toggleBanBroker, toggleCustomerCreation };
+
